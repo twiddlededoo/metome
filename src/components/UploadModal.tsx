@@ -79,7 +79,7 @@ export function UploadModal({ open, onClose, onFileSelected }: UploadModalProps)
   const handlePhoneUpload = async () => {
     try {
       setError('');
-      const sessionData = await createUploadSession();
+      const sessionData = await createUploadSession({ data: {} });
       setSession(sessionData);
 
       const baseUrl = typeof window !== 'undefined'

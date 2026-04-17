@@ -13,7 +13,8 @@ function generateSessionId(): string {
 }
 
 export const createUploadSession = createServerFn({ method: 'POST' })
-  .handler(async () => {
+  .inputValidator((data: { receiverPublicKey?: string }) => data)
+  .handler(async ({ data }) => {
     const supabase = getSupabase();
     const sessionId = generateSessionId();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -22,6 +23,7 @@ export const createUploadSession = createServerFn({ method: 'POST' })
       session_id: sessionId,
       expires_at: expiresAt,
       status: 'waiting',
+      receiver_public_key: data.receiverPublicKey ?? null,
     });
     if (error) throw new Error('Failed to create session');
 
@@ -38,7 +40,7 @@ export const getUploadSession = createServerFn({ method: 'POST' })
     const supabase = getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
-      .select('session_id, expires_at, status, file_name, file_type, file_size')
+      .select('session_id, expires_at, status, file_name, file_type, file_size, receiver_public_key')
       .eq('session_id', data.sessionId)
       .single();
 

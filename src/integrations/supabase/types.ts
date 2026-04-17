@@ -23,6 +23,7 @@ export type Database = {
           file_size: number | null
           file_type: string | null
           id: string
+          receiver_public_key: string | null
           session_id: string
           status: string
         }
@@ -34,6 +35,7 @@ export type Database = {
           file_size?: number | null
           file_type?: string | null
           id?: string
+          receiver_public_key?: string | null
           session_id: string
           status?: string
         }
@@ -45,6 +47,7 @@ export type Database = {
           file_size?: number | null
           file_type?: string | null
           id?: string
+          receiver_public_key?: string | null
           session_id?: string
           status?: string
         }
