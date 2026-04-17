@@ -1,17 +1,19 @@
 import { useState, useRef, useCallback } from 'react';
-import { Upload, CheckCircle, AlertCircle, Loader2, Camera, File } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Loader2, Camera, File, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { uploadFileToSession, getUploadSession } from '@/utils/uploadSessions.functions';
+import { encryptionManager, type QRData } from '@/utils/encryption';
 
 interface MobileUploadPageProps {
   sessionId: string;
 }
 
 export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
-  const [uploadState, setUploadState] = useState<'idle' | 'validating' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadState, setUploadState] = useState<'idle' | 'validating' | 'encrypting' | 'uploading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
   const [progress, setProgress] = useState<number>(0);
+  const [qrData, setQrData] = useState<QRData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = useCallback(async (file: File) => {
@@ -21,6 +23,17 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
       setFileName(file.name);
       setProgress(0);
 
+      // Parse QR data from URL if available
+      const urlParams = new URLSearchParams(window.location.search);
+      const qrDataString = urlParams.get('data');
+      
+      if (!qrDataString) {
+        throw new Error('Invalid QR code. Please scan a new QR code.');
+      }
+
+      const parsedQrData = encryptionManager.decodeQRData(qrDataString);
+      setQrData(parsedQrData);
+
       // Validate session exists on server
       const session = await getUploadSession({ data: { sessionId } });
       if (!session) {
@@ -29,6 +42,18 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
       if (session.status !== 'waiting') {
         throw new Error('This session has already been used or expired.');
       }
+
+      setUploadState('encrypting');
+
+      // Convert file to array buffer
+      const fileBuffer = await file.arrayBuffer();
+
+      // Encrypt file using ECDH + AES-GCM
+      const encryptedFile = await encryptionManager.encryptFileForTransfer(
+        fileBuffer,
+        parsedQrData.receiverPublicKey,
+        sessionId
+      );
 
       setUploadState('uploading');
 
@@ -44,14 +69,12 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
         });
       }, 200);
 
-      // Convert file to base64
-      const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < uint8Array.length; i++) {
-        binary += String.fromCharCode(uint8Array[i]);
-      }
-      const base64 = btoa(binary);
+      // Convert encrypted data to base64 for upload
+      const encryptedBase64 = encryptionManager.arrayBufferToBase64(encryptedFile.data);
+      const ivArrayBuffer = new ArrayBuffer(encryptedFile.iv.length);
+      const ivView = new Uint8Array(ivArrayBuffer);
+      ivView.set(encryptedFile.iv);
+      const ivBase64 = encryptionManager.arrayBufferToBase64(ivArrayBuffer);
 
       await uploadFileToSession({
         data: {
@@ -59,7 +82,9 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
           fileName: file.name,
           fileType: file.type,
           fileSize: file.size,
-          fileData: base64,
+          encryptedFile: encryptedBase64,
+          iv: ivBase64,
+          senderPublicKey: encryptedFile.senderPublicKey,
         },
       });
 
@@ -94,16 +119,47 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
   const renderContent = () => {
     switch (uploadState) {
       case 'validating':
+        return (
+          <div className="flex flex-col items-center py-12 px-6">
+            <div className="mb-8">
+              <Loader2 className="h-16 w-16 animate-spin text-primary" />
+            </div>
+            <h2 className="text-xl font-semibold mb-4 text-center">Validating Session...</h2>
+            <p className="text-sm text-muted-foreground text-center max-w-md">
+              Please wait while we validate your secure session...
+            </p>
+          </div>
+        );
+
+      case 'encrypting':
+        return (
+          <div className="flex flex-col items-center py-12 px-6">
+            <div className="mb-8">
+              <Loader2 className="h-16 w-16 animate-spin text-primary" />
+            </div>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Lock className="h-4 w-4 text-green-600" />
+              <span className="text-sm text-green-600 font-medium">Encrypting file...</span>
+            </div>
+            <h2 className="text-xl font-semibold mb-4 text-center">Securing Your File</h2>
+            <p className="text-sm text-muted-foreground text-center max-w-md">
+              Your file is being encrypted with end-to-end encryption before upload...
+            </p>
+          </div>
+        );
+
       case 'uploading':
         return (
           <div className="flex flex-col items-center py-12 px-6">
             <div className="mb-8">
               <Loader2 className="h-16 w-16 animate-spin text-primary" />
             </div>
-            <h2 className="text-xl font-semibold mb-4 text-center">
-              {uploadState === 'validating' ? 'Validating Session...' : 'Uploading Document'}
-            </h2>
-            {fileName && uploadState === 'uploading' && (
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Lock className="h-4 w-4 text-green-600" />
+              <span className="text-sm text-green-600 font-medium">Uploading encrypted file...</span>
+            </div>
+            <h2 className="text-xl font-semibold mb-4 text-center">Uploading Securely</h2>
+            {fileName && (
               <div className="w-full max-w-sm mb-6">
                 <div className="flex items-center gap-3 mb-2">
                   <File className="h-5 w-5 text-muted-foreground" />
@@ -121,7 +177,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
               </div>
             )}
             <p className="text-sm text-muted-foreground text-center max-w-md">
-              Please wait while we upload your document...
+              Your encrypted file is being securely transferred...
             </p>
           </div>
         );
@@ -132,12 +188,16 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
             <div className="mb-6">
               <CheckCircle className="h-20 w-20 text-green-600" />
             </div>
-            <h2 className="text-2xl font-bold mb-4 text-center">Upload Successful!</h2>
+            <h2 className="text-2xl font-bold mb-4 text-center">Secure Upload Complete!</h2>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Lock className="h-4 w-4 text-green-600" />
+              <span className="text-sm text-green-600 font-medium">End-to-end encrypted</span>
+            </div>
             <p className="text-lg text-muted-foreground mb-8 text-center">
-              Your document has been uploaded successfully.
+              Your file has been securely encrypted and uploaded.
             </p>
             <p className="text-sm text-muted-foreground text-center max-w-md">
-              You can now return to your desktop to continue with the submission.
+              Only the intended receiver can decrypt and access this file.
             </p>
           </div>
         );
@@ -164,9 +224,13 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
             <div className="mb-8">
               <Upload className="h-16 w-16 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold mb-4 text-center">Upload Document</h1>
+            <h1 className="text-2xl font-bold mb-4 text-center">Secure File Upload</h1>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Lock className="h-4 w-4 text-green-600" />
+              <span className="text-sm text-green-600 font-medium">End-to-end encrypted</span>
+            </div>
             <p className="text-sm text-muted-foreground mb-8 text-center max-w-md">
-              Select a document from your phone to upload to your desktop session.
+              Select a file from your phone to upload securely to your desktop. Your file will be encrypted before transfer.
             </p>
             <Button 
               onClick={handleUploadClick}
@@ -183,6 +247,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
               <p className="text-xs text-muted-foreground">
                 Maximum file size: 5MB
               </p>
+              <p className="text-xs text-green-600 font-medium">🔒 Files are encrypted on your device</p>
             </div>
           </div>
         );

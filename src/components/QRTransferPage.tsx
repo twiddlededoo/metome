@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Smartphone, Loader2, CheckCircle, AlertCircle, RefreshCw, Download, QrCode } from 'lucide-react';
+import { Smartphone, Loader2, CheckCircle, AlertCircle, RefreshCw, Download, QrCode, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import QRCodeLib from 'qrcode';
 import {
@@ -8,6 +8,7 @@ import {
   getUploadedFileData,
   deleteUploadSession,
 } from '@/utils/uploadSessions.functions';
+import { encryptionManager, type KeyPair, type EncryptedFile } from '@/utils/encryption';
 
 interface UploadedFileInfo {
   name: string;
@@ -16,7 +17,7 @@ interface UploadedFileInfo {
   dataUrl?: string;
 }
 
-type TransferState = 'generating' | 'waiting' | 'success' | 'error' | 'expired';
+type TransferState = 'generating' | 'waiting' | 'decrypting' | 'success' | 'error' | 'expired';
 
 export function QRTransferPage() {
   const [transferState, setTransferState] = useState<TransferState>('generating');
@@ -25,6 +26,7 @@ export function QRTransferPage() {
   const [uploadedFile, setUploadedFile] = useState<UploadedFileInfo | null>(null);
   const [error, setError] = useState<string>('');
   const [timeRemaining, setTimeRemaining] = useState<number>(600); // 10 minutes
+  const [receiverKeyPair, setReceiverKeyPair] = useState<KeyPair | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -53,13 +55,23 @@ export function QRTransferPage() {
         await deleteUploadSession({ data: { sessionId } });
       }
 
+      // Generate ECDH key pair for receiver
+      const keyPair = await encryptionManager.generateReceiverKeyPair();
+      setReceiverKeyPair(keyPair);
+
       const sessionData = await createUploadSession();
       setSessionId(sessionData.session_id);
+
+      // Create QR data with session ID and receiver's public key
+      const qrData = encryptionManager.encodeQRData({
+        sessionId: sessionData.session_id,
+        receiverPublicKey: keyPair.publicKeyBase64,
+      });
 
       const baseUrl = typeof window !== 'undefined'
         ? `${window.location.origin}/mobile-upload`
         : 'http://localhost:3000/mobile-upload';
-      const uploadUrl = `${baseUrl}/${sessionData.session_id}`;
+      const uploadUrl = `${baseUrl}/${sessionData.session_id}?data=${encodeURIComponent(qrData)}`;
 
       const qrCode = await QRCodeLib.toDataURL(uploadUrl, {
         width: 256,
@@ -71,7 +83,7 @@ export function QRTransferPage() {
       setTransferState('waiting');
       setTimeRemaining(600);
     } catch (err) {
-      setError('Failed to generate QR code. Please try again.');
+      setError('Failed to generate secure QR code. Please try again.');
       setTransferState('error');
     }
   };
@@ -112,22 +124,46 @@ export function QRTransferPage() {
           if (updated.status === 'uploaded') {
             stopPolling();
             stopTimer();
+            setTransferState('decrypting');
             
-            const fileData = await getUploadedFileData({ data: { sessionId } });
-            if (fileData) {
-              const dataUrl = `data:${fileData.file_type};base64,${fileData.file_data}`;
-              setUploadedFile({
-                name: fileData.file_name,
-                type: fileData.file_type,
-                size: fileData.size,
-                dataUrl,
-              });
-              setTransferState('success');
-              
-              // Auto-download after 2 seconds
-              setTimeout(() => {
-                handleDownloadFile();
-              }, 2000);
+            try {
+              const fileData = await getUploadedFileData({ data: { sessionId } });
+              if (fileData && receiverKeyPair) {
+                // Parse encrypted file data
+                const encryptedFile: EncryptedFile = {
+                  data: encryptionManager.base64ToArrayBuffer(fileData.encrypted_file),
+                  iv: new Uint8Array(encryptionManager.base64ToArrayBuffer(fileData.iv)),
+                  senderPublicKey: fileData.sender_public_key,
+                };
+
+                // Decrypt the file
+                const decryptedBuffer = await encryptionManager.decryptReceivedFile(
+                  encryptedFile,
+                  receiverKeyPair.privateKey,
+                  sessionId
+                );
+
+                // Create blob and data URL
+                const blob = encryptionManager.arrayBufferToBlob(decryptedBuffer, fileData.file_type);
+                const dataUrl = URL.createObjectURL(blob);
+
+                setUploadedFile({
+                  name: fileData.file_name,
+                  type: fileData.file_type,
+                  size: fileData.size,
+                  dataUrl,
+                });
+                setTransferState('success');
+                
+                // Auto-download after 2 seconds
+                setTimeout(() => {
+                  handleDownloadFile();
+                }, 2000);
+              }
+            } catch (decryptError) {
+              console.error('Decryption failed:', decryptError);
+              setError('Failed to decrypt file. The file may be corrupted or tampered with.');
+              setTransferState('error');
             }
           } else if (updated.status === 'expired') {
             stopPolling();
@@ -141,7 +177,7 @@ export function QRTransferPage() {
     }
 
     return () => stopPolling();
-  }, [sessionId, transferState, stopPolling, stopTimer]);
+  }, [sessionId, transferState, stopPolling, stopTimer, receiverKeyPair]);
 
   // Countdown timer
   useEffect(() => {
@@ -178,29 +214,47 @@ export function QRTransferPage() {
         return (
           <div className="flex flex-col items-center py-16">
             <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
-            <h2 className="text-2xl font-bold mb-4">Generating QR Code...</h2>
-            <p className="text-muted-foreground">Please wait while we prepare your upload session</p>
+            <h2 className="text-2xl font-bold mb-4">Generating Secure QR Code...</h2>
+            <p className="text-muted-foreground">Please wait while we prepare your encrypted upload session</p>
+          </div>
+        );
+
+      case 'decrypting':
+        return (
+          <div className="flex flex-col items-center py-16">
+            <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
+            <h2 className="text-2xl font-bold mb-4">Decrypting File...</h2>
+            <p className="text-muted-foreground">Please wait while we securely decrypt your file</p>
           </div>
         );
 
       case 'waiting':
         return (
           <div className="flex flex-col items-center py-8">
-            <div className="mb-8">
+            <div className="mb-6">
               {qrCodeUrl && (
-                <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64 border-2 border-border rounded-lg" />
+                <div className="relative">
+                  <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64 border-2 border-border rounded-lg" />
+                  <div className="absolute -top-2 -right-2 bg-green-100 text-green-800 rounded-full p-2">
+                    <Lock className="h-4 w-4" />
+                  </div>
+                </div>
               )}
             </div>
             
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold mb-2">Scan to Upload File</h2>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Lock className="h-4 w-4 text-green-600" />
+                <span className="text-sm text-green-600 font-medium">End-to-end encrypted</span>
+              </div>
               <p className="text-muted-foreground mb-4 max-w-md">
-                Use your phone's camera to scan this QR code and upload any file up to 5MB
+                Use your phone's camera to scan this QR code and upload any file up to 5MB. Your file will be encrypted before upload.
               </p>
               
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-4">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Waiting for upload... {formatTime(timeRemaining)} remaining</span>
+                <span>Waiting for secure upload... {formatTime(timeRemaining)} remaining</span>
               </div>
             </div>
 
@@ -214,6 +268,7 @@ export function QRTransferPage() {
             <div className="mt-8 text-center text-sm text-muted-foreground">
               <p>Supported formats: JPG, PNG, PDF</p>
               <p>Maximum file size: 5MB</p>
+              <p className="text-green-600 font-medium">🔒 Files are encrypted on your device</p>
             </div>
           </div>
         );
@@ -225,9 +280,13 @@ export function QRTransferPage() {
               <CheckCircle className="h-20 w-20 text-green-600" />
             </div>
             
-            <h2 className="text-2xl font-bold mb-4 text-center">File Uploaded Successfully!</h2>
+            <h2 className="text-2xl font-bold mb-4 text-center">File Transferred Securely!</h2>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Lock className="h-4 w-4 text-green-600" />
+              <span className="text-sm text-green-600 font-medium">End-to-end encrypted</span>
+            </div>
             <p className="text-muted-foreground mb-8 text-center">
-              Your file has been received and downloaded automatically.
+              Your file has been securely transferred and decrypted successfully.
             </p>
             
             {uploadedFile && (
