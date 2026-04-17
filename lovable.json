@@ -1,0 +1,59 @@
+{
+  "name": "upload-form-reimagined",
+  "description": "Document upload form with QR code mobile upload functionality",
+  "type": "fullstack",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "startCommand": "npm run start",
+  "env": {
+    "VITE_API_BASE_URL": "https://your-app.lovable.app"
+  },
+  "routes": [
+    {
+      "path": "/",
+      "component": "src/routes/index.tsx"
+    },
+    {
+      "path": "/mobile-upload/:sessionId",
+      "component": "src/routes/mobile-upload.$sessionId.tsx"
+    }
+  ],
+  "apiRoutes": [
+    {
+      "path": "/api/upload-sessions",
+      "method": "POST",
+      "handler": "src/api/routes.ts"
+    },
+    {
+      "path": "/api/upload-sessions/:sessionId",
+      "method": "GET",
+      "handler": "src/api/routes.ts"
+    },
+    {
+      "path": "/api/upload-sessions/:sessionId",
+      "method": "DELETE",
+      "handler": "src/api/routes.ts"
+    },
+    {
+      "path": "/api/upload/:sessionId",
+      "method": "POST",
+      "handler": "src/api/routes.ts"
+    },
+    {
+      "path": "/api/health",
+      "method": "GET",
+      "handler": "src/api/routes.ts"
+    }
+  ],
+  "dependencies": {
+    "hono": "^4.6.7",
+    "@hono/node-server": "^1.13.7",
+    "uuid": "^10.0.0",
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "@types/uuid": "^10.0.0",
+    "@types/qrcode": "^1.5.5"
+  }
+}
