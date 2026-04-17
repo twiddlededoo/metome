@@ -144,9 +144,9 @@ export function UploadModal({ open, onClose, onFileSelected }: UploadModalProps)
   };
 
   const handleDownloadFile = () => {
-    if (uploadedFile) {
+    if (uploadedFile && uploadedFile.dataUrl) {
       const link = document.createElement('a');
-      link.href = uploadedFile.url;
+      link.href = uploadedFile.dataUrl;
       link.download = uploadedFile.name;
       document.body.appendChild(link);
       link.click();

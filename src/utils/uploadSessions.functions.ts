@@ -82,23 +82,20 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     if (!allowedTypes.includes(data.fileType)) throw new Error('Invalid file type');
     if (data.fileSize > 5 * 1024 * 1024) throw new Error('File too large');
 
-    // Handle both encrypted and legacy unencrypted uploads
-    const updateData: any = {
+    // Store encrypted payload as JSON in file_data column
+    const payload = JSON.stringify({
+      encryptedFile: data.encryptedFile,
+      iv: data.iv,
+      senderPublicKey: data.senderPublicKey,
+    });
+
+    const updateData = {
       status: 'uploaded',
       file_name: data.fileName,
       file_type: data.fileType,
       file_size: data.fileSize,
+      file_data: payload,
     };
-
-    // Add encrypted fields if present
-    if (data.encryptedFile && data.iv && data.senderPublicKey) {
-      updateData.encrypted_file = data.encryptedFile;
-      updateData.iv = data.iv;
-      updateData.sender_public_key = data.senderPublicKey;
-    } else {
-      // Legacy support for unencrypted uploads
-      updateData.file_data = data.fileData || '';
-    }
 
     const { error: updateError } = await supabase
       .from('upload_sessions')
@@ -116,32 +113,34 @@ export const getUploadedFileData = createServerFn({ method: 'POST' })
     const supabase = getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
-      .select('file_data, file_name, file_type, file_size, encrypted_file, iv, sender_public_key')
+      .select('file_data, file_name, file_type, file_size')
       .eq('session_id', data.sessionId)
       .eq('status', 'uploaded')
       .single();
 
     if (error || !session) return null;
 
-    // Handle both encrypted and legacy unencrypted uploads
-    if (session.encrypted_file && session.iv && session.sender_public_key) {
-      return {
-        encrypted_file: session.encrypted_file,
-        iv: session.iv,
-        sender_public_key: session.sender_public_key,
-        file_name: session.file_name!,
-        file_type: session.file_type!,
-        size: session.file_size!,
-      };
-    } else {
-      // Legacy support for unencrypted uploads
-      return {
-        file_data: session.file_data,
-        file_name: session.file_name!,
-        file_type: session.file_type!,
-        size: session.file_size!,
-      };
+    let encrypted_file = '';
+    let iv = '';
+    let sender_public_key = '';
+    try {
+      const parsed = JSON.parse(session.file_data || '{}');
+      encrypted_file = parsed.encryptedFile || '';
+      iv = parsed.iv || '';
+      sender_public_key = parsed.senderPublicKey || '';
+    } catch {
+      // file_data wasn't JSON — treat as empty encrypted payload
     }
+
+    return {
+      encrypted_file,
+      iv,
+      sender_public_key,
+      file_data: session.file_data,
+      file_name: session.file_name!,
+      file_type: session.file_type!,
+      size: session.file_size!,
+    };
   });
 
 export const deleteUploadSession = createServerFn({ method: 'POST' })

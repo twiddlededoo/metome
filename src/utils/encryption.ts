@@ -149,10 +149,13 @@ class EncryptionManager {
     aesKey: CryptoKey
   ): Promise<ArrayBuffer> {
     try {
+      // Copy into a fresh ArrayBuffer-backed Uint8Array to satisfy strict BufferSource typing
+      const ivCopy = new Uint8Array(iv.length);
+      ivCopy.set(iv);
       return await crypto.subtle.decrypt(
         {
           name: this.ENCRYPTION_ALGORITHM,
-          iv,
+          iv: ivCopy,
         },
         aesKey,
         encryptedData
