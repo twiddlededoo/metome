@@ -30,15 +30,15 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Upload from phone" },
-      { name: "description", content: "Lovable Generated Project" },
+      { name: "description", content: "Transfer files from phone to laptop" },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "Upload from phone" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:description", content: "Transfer files from phone to laptop" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Upload from phone" },
-      { name: "twitter:description", content: "Lovable Generated Project" },
+      { name: "twitter:description", content: "Transfer files from phone to laptop" },
     ],
     links: [
       {
