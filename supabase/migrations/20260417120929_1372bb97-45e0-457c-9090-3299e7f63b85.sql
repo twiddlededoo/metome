@@ -1,0 +1,1 @@
+ALTER TABLE public.upload_sessions ADD COLUMN IF NOT EXISTS receiver_public_key text;
