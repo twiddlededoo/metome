@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { Upload, CheckCircle, AlertCircle, Loader2, Camera, File, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { uploadFileToSession, getUploadSession } from '@/utils/uploadSessions.functions';
-import { encryptionManager, type QRData } from '@/utils/encryption';
+import { encryptionManager } from '@/utils/encryption';
 
 interface MobileUploadPageProps {
   sessionId: string;
@@ -13,7 +13,6 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
   const [error, setError] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
   const [progress, setProgress] = useState<number>(0);
-  const [qrData, setQrData] = useState<QRData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = useCallback(async (file: File) => {
@@ -23,24 +22,16 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
       setFileName(file.name);
       setProgress(0);
 
-      // Parse QR data from URL if available
-      const urlParams = new URLSearchParams(window.location.search);
-      const qrDataString = urlParams.get('data');
-      
-      if (!qrDataString) {
-        throw new Error('Invalid QR code. Please scan a new QR code.');
-      }
-
-      const parsedQrData = encryptionManager.decodeQRData(qrDataString);
-      setQrData(parsedQrData);
-
-      // Validate session exists on server
+      // Validate session exists on server and fetch receiver public key
       const session = await getUploadSession({ data: { sessionId } });
       if (!session) {
         throw new Error('Invalid or expired session. Please scan a new QR code.');
       }
       if (session.status !== 'waiting') {
         throw new Error('This session has already been used or expired.');
+      }
+      if (!session.receiver_public_key) {
+        throw new Error('Session is missing encryption key. Please generate a new QR code.');
       }
 
       setUploadState('encrypting');
@@ -51,7 +42,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
       // Encrypt file using ECDH + AES-GCM
       const encryptedFile = await encryptionManager.encryptFileForTransfer(
         fileBuffer,
-        parsedQrData.receiverPublicKey,
+        session.receiver_public_key,
         sessionId
       );
 

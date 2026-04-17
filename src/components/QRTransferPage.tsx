@@ -59,19 +59,15 @@ export function QRTransferPage() {
       const keyPair = await encryptionManager.generateReceiverKeyPair();
       setReceiverKeyPair(keyPair);
 
-      const sessionData = await createUploadSession();
-      setSessionId(sessionData.session_id);
-
-      // Create QR data with session ID and receiver's public key
-      const qrData = encryptionManager.encodeQRData({
-        sessionId: sessionData.session_id,
-        receiverPublicKey: keyPair.publicKeyBase64,
+      const sessionData = await createUploadSession({
+        data: { receiverPublicKey: keyPair.publicKeyBase64 },
       });
+      setSessionId(sessionData.session_id);
 
       const baseUrl = typeof window !== 'undefined'
         ? `${window.location.origin}/mobile-upload`
         : 'http://localhost:3000/mobile-upload';
-      const uploadUrl = `${baseUrl}/${sessionData.session_id}?data=${encodeURIComponent(qrData)}`;
+      const uploadUrl = `${baseUrl}/${sessionData.session_id}`;
 
       const qrCode = await QRCodeLib.toDataURL(uploadUrl, {
         width: 256,
