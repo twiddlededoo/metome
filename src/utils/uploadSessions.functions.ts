@@ -1,18 +1,25 @@
 import { createServerFn } from '@tanstack/react-start';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/integrations/supabase/types';
 
-async function getSupabase() {
-  const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
-  return supabaseAdmin;
+function getSupabase() {
+  const url = process.env.SUPABASE_URL || (import.meta as any).env?.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY || (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) throw new Error('Missing Supabase config');
+  return createClient<Database>(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
 function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  // 32 hex chars (~128 bits) — acts as a capability token
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return `session_${Date.now()}_${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 export const createUploadSession = createServerFn({ method: 'POST' })
   .inputValidator((data: { receiverPublicKey?: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = await getSupabase();
+    const supabase = getSupabase();
     const sessionId = generateSessionId();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
@@ -22,7 +29,7 @@ export const createUploadSession = createServerFn({ method: 'POST' })
       status: 'waiting',
       receiver_public_key: data.receiverPublicKey ?? null,
     });
-    if (error) throw new Error('Failed to create session');
+    if (error) throw new Error('Failed to create session: ' + error.message);
 
     return {
       session_id: sessionId,
@@ -34,7 +41,7 @@ export const createUploadSession = createServerFn({ method: 'POST' })
 export const getUploadSession = createServerFn({ method: 'POST' })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = await getSupabase();
+    const supabase = getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
       .select('session_id, expires_at, status, file_name, file_type, file_size, receiver_public_key')
@@ -43,7 +50,6 @@ export const getUploadSession = createServerFn({ method: 'POST' })
 
     if (error || !session) return null;
 
-    // Check expiry
     if (new Date(session.expires_at).getTime() < Date.now() && session.status === 'waiting') {
       await supabase.from('upload_sessions').update({ status: 'expired' }).eq('session_id', data.sessionId);
       return { ...session, status: 'expired', expires_at: new Date(session.expires_at).getTime() };
@@ -53,17 +59,17 @@ export const getUploadSession = createServerFn({ method: 'POST' })
   });
 
 export const uploadFileToSession = createServerFn({ method: 'POST' })
-  .inputValidator((data: { 
-    sessionId: string; 
-    fileName: string; 
-    fileType: string; 
-    fileSize: number; 
-    encryptedFile?: string; 
-    iv?: string; 
+  .inputValidator((data: {
+    sessionId: string;
+    fileName: string;
+    fileType: string;
+    fileSize: number;
+    encryptedFile?: string;
+    iv?: string;
     senderPublicKey?: string;
   }) => data)
   .handler(async ({ data }) => {
-    const supabase = await getSupabase();
+    const supabase = getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
       .select('session_id, expires_at, status')
@@ -81,24 +87,21 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     if (!allowedTypes.includes(data.fileType)) throw new Error('Invalid file type');
     if (data.fileSize > 5 * 1024 * 1024) throw new Error('File too large');
 
-    // Store encrypted payload as JSON in file_data column
     const payload = JSON.stringify({
       encryptedFile: data.encryptedFile,
       iv: data.iv,
       senderPublicKey: data.senderPublicKey,
     });
 
-    const updateData = {
-      status: 'uploaded',
-      file_name: data.fileName,
-      file_type: data.fileType,
-      file_size: data.fileSize,
-      file_data: payload,
-    };
-
     const { error: updateError } = await supabase
       .from('upload_sessions')
-      .update(updateData)
+      .update({
+        status: 'uploaded',
+        file_name: data.fileName,
+        file_type: data.fileType,
+        file_size: data.fileSize,
+        file_data: payload,
+      })
       .eq('session_id', data.sessionId);
 
     if (updateError) throw new Error('Failed to save upload');
@@ -109,7 +112,7 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
 export const getUploadedFileData = createServerFn({ method: 'POST' })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = await getSupabase();
+    const supabase = getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
       .select('file_data, file_name, file_type, file_size')
@@ -128,7 +131,7 @@ export const getUploadedFileData = createServerFn({ method: 'POST' })
       iv = parsed.iv || '';
       sender_public_key = parsed.senderPublicKey || '';
     } catch {
-      // file_data wasn't JSON — treat as empty encrypted payload
+      // ignore
     }
 
     return {
@@ -145,7 +148,7 @@ export const getUploadedFileData = createServerFn({ method: 'POST' })
 export const deleteUploadSession = createServerFn({ method: 'POST' })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = await getSupabase();
+    const supabase = getSupabase();
     await supabase.from('upload_sessions').delete().eq('session_id', data.sessionId);
     return { success: true };
   });
