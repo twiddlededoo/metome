@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MobileUploadSessionIdRouteImport } from './routes/mobile-upload.$sessionId'
-import { Route as ApiDebugEnvRouteImport } from './routes/api/debug-env'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -23,39 +22,30 @@ const MobileUploadSessionIdRoute = MobileUploadSessionIdRouteImport.update({
   path: '/mobile-upload/$sessionId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiDebugEnvRoute = ApiDebugEnvRouteImport.update({
-  id: '/api/debug-env',
-  path: '/api/debug-env',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/api/debug-env': typeof ApiDebugEnvRoute
   '/mobile-upload/$sessionId': typeof MobileUploadSessionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/api/debug-env': typeof ApiDebugEnvRoute
   '/mobile-upload/$sessionId': typeof MobileUploadSessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/api/debug-env': typeof ApiDebugEnvRoute
   '/mobile-upload/$sessionId': typeof MobileUploadSessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/debug-env' | '/mobile-upload/$sessionId'
+  fullPaths: '/' | '/mobile-upload/$sessionId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/debug-env' | '/mobile-upload/$sessionId'
-  id: '__root__' | '/' | '/api/debug-env' | '/mobile-upload/$sessionId'
+  to: '/' | '/mobile-upload/$sessionId'
+  id: '__root__' | '/' | '/mobile-upload/$sessionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApiDebugEnvRoute: typeof ApiDebugEnvRoute
   MobileUploadSessionIdRoute: typeof MobileUploadSessionIdRoute
 }
 
@@ -75,21 +65,22 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MobileUploadSessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/debug-env': {
-      id: '/api/debug-env'
-      path: '/api/debug-env'
-      fullPath: '/api/debug-env'
-      preLoaderRoute: typeof ApiDebugEnvRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApiDebugEnvRoute: ApiDebugEnvRoute,
   MobileUploadSessionIdRoute: MobileUploadSessionIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
