@@ -268,21 +268,42 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="bg-card border-t border-border rounded-t-xl shadow-xl p-4">
-                      <div className="mb-2 w-12 h-1.5 bg-muted rounded mx-auto" />
-                      <div className="space-y-2">
-                        <Button onClick={handleTakePhotoClick} size="md" className="w-full gap-2 justify-start">
-                          <Camera className="h-5 w-5" />
-                          Take Photo
+                      <div className="mb-3 w-20 h-2 bg-muted rounded mx-auto" />
+                      <div className="space-y-3">
+                        <Button
+                          onClick={handleTakePhotoClick}
+                          size="md"
+                          className="w-full py-4 px-4 text-lg rounded-lg flex items-center gap-3 justify-start"
+                        >
+                          <Camera className="h-6 w-6" />
+                          <span className="font-medium">Take Photo</span>
                         </Button>
-                        <Button onClick={handleChooseFromPhotosClick} size="md" variant="outline" className="w-full gap-2 justify-start">
-                          <File className="h-5 w-5" />
-                          Photo Library
+
+                        <Button
+                          onClick={handleChooseFromPhotosClick}
+                          size="md"
+                          variant="outline"
+                          className="w-full py-4 px-4 text-lg rounded-lg flex items-center gap-3 justify-start"
+                        >
+                          <File className="h-6 w-6" />
+                          <span className="font-medium">Photo Library</span>
                         </Button>
-                        <Button onClick={handleGenericFileClick} size="md" className="w-full gap-2 justify-start">
-                          <Upload className="h-5 w-5" />
-                          Files
+
+                        <Button
+                          onClick={handleGenericFileClick}
+                          size="md"
+                          className="w-full py-4 px-4 text-lg rounded-lg flex items-center gap-3 justify-start"
+                        >
+                          <Upload className="h-6 w-6" />
+                          <span className="font-medium">Files</span>
                         </Button>
-                        <Button onClick={() => setShowPickerOptions(false)} size="md" variant="ghost" className="w-full">
+
+                        <Button
+                          onClick={() => setShowPickerOptions(false)}
+                          size="md"
+                          variant="ghost"
+                          className="w-full py-3 text-base"
+                        >
                           Cancel
                         </Button>
                       </div>
