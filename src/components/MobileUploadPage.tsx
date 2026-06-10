@@ -14,6 +14,8 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
   const [fileName, setFileName] = useState<string>('');
   const [progress, setProgress] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoCaptureRef = useRef<HTMLInputElement>(null);
+  const photoLibraryRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = useCallback(async (file: File) => {
     try {
@@ -97,7 +99,16 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
   };
 
   const handleUploadClick = () => {
+    // Default action: open generic file picker. For iOS we also provide separate buttons below.
     fileInputRef.current?.click();
+  };
+
+  const handleTakePhotoClick = () => {
+    photoCaptureRef.current?.click();
+  };
+
+  const handleChooseFromPhotosClick = () => {
+    photoLibraryRef.current?.click();
   };
 
   const handleRetry = () => {
@@ -223,14 +234,26 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
             <p className="text-sm text-muted-foreground mb-8 text-center max-w-md">
               Select a file from your phone to upload securely to your desktop. Your file will be encrypted before transfer.
             </p>
-            <Button 
-              onClick={handleUploadClick}
-              size="lg"
-              className="w-full max-w-xs mb-4 gap-2"
-            >
-              <Camera className="h-5 w-5" />
-              Upload File
-            </Button>
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex w-full max-w-xs gap-2">
+                <Button onClick={handleTakePhotoClick} size="sm" className="flex-1 gap-2">
+                  <Camera className="h-4 w-4" />
+                  Take Photo
+                </Button>
+                <Button onClick={handleChooseFromPhotosClick} size="sm" variant="outline" className="flex-1 gap-2">
+                  <File className="h-4 w-4" />
+                  Photo Library
+                </Button>
+              </div>
+              <Button 
+                onClick={handleUploadClick}
+                size="lg"
+                className="w-full max-w-xs mb-4 gap-2"
+              >
+                <Upload className="h-5 w-5" />
+                Upload File
+              </Button>
+            </div>
             <div className="text-center space-y-2">
               <p className="text-xs text-muted-foreground">
                 Supported formats: JPG, PNG, PDF
@@ -258,11 +281,25 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
         </div>
       </main>
       <input
+        ref={photoCaptureRef}
+        type="file"
+        className="hidden"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileChange}
+      />
+      <input
+        ref={photoLibraryRef}
+        type="file"
+        className="hidden"
+        accept="image/*"
+        onChange={handleFileChange}
+      />
+      <input
         ref={fileInputRef}
         type="file"
         className="hidden"
-        accept="image/*,.pdf"
-        capture="environment"
+        accept="image/*,application/pdf"
         onChange={handleFileChange}
       />
     </div>

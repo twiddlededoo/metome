@@ -19,23 +19,43 @@ function generateSessionId(): string {
 export const createUploadSession = createServerFn({ method: 'POST' })
   .inputValidator((data: { receiverPublicKey?: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = getSupabase();
-    const sessionId = generateSessionId();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    try {
+      // Local dev fallback: if Supabase env is not configured, return an in-memory session
+      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const sessionId = generateSessionId();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        console.warn('Supabase env not set — returning ephemeral session for local development:', sessionId);
+        return {
+          session_id: sessionId,
+          expires_at: new Date(expiresAt).getTime(),
+          status: 'waiting' as const,
+        };
+      }
 
-    const { error } = await supabase.from('upload_sessions').insert({
-      session_id: sessionId,
-      expires_at: expiresAt,
-      status: 'waiting',
-      receiver_public_key: data.receiverPublicKey ?? null,
-    });
-    if (error) throw new Error('Failed to create session: ' + error.message);
+      const supabase = await getSupabase();
+      const sessionId = generateSessionId();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    return {
-      session_id: sessionId,
-      expires_at: new Date(expiresAt).getTime(),
-      status: 'waiting' as const,
-    };
+      const { error } = await supabase.from('upload_sessions').insert({
+        session_id: sessionId,
+        expires_at: expiresAt,
+        status: 'waiting',
+        receiver_public_key: data.receiverPublicKey ?? null,
+      });
+      if (error) {
+        console.error('Supabase insert error creating upload session:', error);
+        throw new Error('Failed to create session: ' + (error.message ?? 'unknown'));
+      }
+
+      return {
+        session_id: sessionId,
+        expires_at: new Date(expiresAt).getTime(),
+        status: 'waiting' as const,
+      };
+    } catch (err) {
+      console.error('createUploadSession error:', err);
+      throw err instanceof Error ? err : new Error('Failed to create session');
+    }
   });
 
 export const getUploadSession = createServerFn({ method: 'POST' })

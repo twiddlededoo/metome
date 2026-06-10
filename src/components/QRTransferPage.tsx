@@ -79,7 +79,9 @@ export function QRTransferPage() {
       setTransferState('waiting');
       setTimeRemaining(600);
     } catch (err) {
-      setError('Failed to generate secure QR code. Please try again.');
+      console.error('generateNewQR error:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || 'Failed to generate secure QR code. Please try again.');
       setTransferState('error');
     }
   };
