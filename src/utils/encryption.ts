@@ -35,7 +35,7 @@ class EncryptionManager {
         namedCurve: this.CURVE,
       },
       true, // extractable
-      [] // no usage needed for ECDH public key
+      ['deriveKey'] // no usage needed for ECDH public key
     );
 
     const publicKeyBuffer = await crypto.subtle.exportKey('raw', keyPair.publicKey);
