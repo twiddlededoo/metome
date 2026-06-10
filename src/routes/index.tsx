@@ -5,7 +5,7 @@ export const Route = createFileRoute("/")({
   component: Index,
   head: () => ({
     meta: [
-      { title: "QR File Transfer" },
+      { title: "QR File Transfer — Sync Test" },
       { name: "description", content: "Instantly transfer files from your phone to your computer using QR codes" },
     ],
   }),
