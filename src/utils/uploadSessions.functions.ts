@@ -12,23 +12,31 @@ function generateSessionId(): string {
 export const createUploadSession = createServerFn({ method: 'POST' })
   .inputValidator((data: { receiverPublicKey?: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = await getSupabase();
-    const sessionId = generateSessionId();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    try {
+      const supabase = await getSupabase();
+      const sessionId = generateSessionId();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    const { error } = await supabase.from('upload_sessions').insert({
-      session_id: sessionId,
-      expires_at: expiresAt,
-      status: 'waiting',
-      receiver_public_key: data.receiverPublicKey ?? null,
-    });
-    if (error) throw new Error('Failed to create session');
+      const { error } = await supabase.from('upload_sessions').insert({
+        session_id: sessionId,
+        expires_at: expiresAt,
+        status: 'waiting',
+        receiver_public_key: data.receiverPublicKey ?? null,
+      });
+      if (error) {
+        console.error('createUploadSession insert error:', JSON.stringify(error));
+        throw new Error('Failed to create session: ' + error.message);
+      }
 
-    return {
-      session_id: sessionId,
-      expires_at: new Date(expiresAt).getTime(),
-      status: 'waiting' as const,
-    };
+      return {
+        session_id: sessionId,
+        expires_at: new Date(expiresAt).getTime(),
+        status: 'waiting' as const,
+      };
+    } catch (e) {
+      console.error('createUploadSession threw:', e instanceof Error ? e.message : String(e), e instanceof Error ? e.stack : '');
+      throw e;
+    }
   });
 
 export const getUploadSession = createServerFn({ method: 'POST' })
