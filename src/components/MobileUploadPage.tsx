@@ -357,7 +357,8 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
         ref={fileInputRef}
         type="file"
         className="hidden"
-        accept="image/*,application/pdf"
+        // Use a generic accept so Android does not prompt the camera again
+        accept="*/*"
         onChange={handleFileChange}
       />
     </div>
