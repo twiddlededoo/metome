@@ -16,8 +16,10 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoCaptureRef = useRef<HTMLInputElement>(null);
   const photoLibraryRef = useRef<HTMLInputElement>(null);
+  const [showPickerOptions, setShowPickerOptions] = useState(false);
 
   const handleFileSelect = useCallback(async (file: File) => {
+    let intervalId: ReturnType<typeof setInterval> | undefined;
     try {
       setError('');
       setUploadState('validating');
@@ -50,12 +52,10 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
 
       setUploadState('uploading');
 
-      // Simulate progress
-      let intervalId: ReturnType<typeof setInterval> | undefined;
+      // Simulate progress up to 90% while upload proceeds
       intervalId = setInterval(() => {
         setProgress(prev => {
           if (prev >= 90) {
-            clearInterval(intervalId);
             return 90;
           }
           return prev + 10;
@@ -81,10 +81,12 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
         },
       });
 
-      clearInterval(intervalId);
+      if (intervalId) clearInterval(intervalId);
       setProgress(100);
       setUploadState('success');
     } catch (err) {
+      if (intervalId) clearInterval(intervalId);
+      console.error('upload error:', err);
       setProgress(0);
       setError(err instanceof Error ? err.message : 'Upload failed');
       setUploadState('error');
@@ -99,16 +101,23 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
   };
 
   const handleUploadClick = () => {
-    // Default action: open generic file picker. For iOS we also provide separate buttons below.
-    fileInputRef.current?.click();
+    // Show picker options (action sheet) instead of directly opening camera on iOS
+    setShowPickerOptions(true);
   };
 
   const handleTakePhotoClick = () => {
+    setShowPickerOptions(false);
     photoCaptureRef.current?.click();
   };
 
   const handleChooseFromPhotosClick = () => {
+    setShowPickerOptions(false);
     photoLibraryRef.current?.click();
+  };
+
+  const handleGenericFileClick = () => {
+    setShowPickerOptions(false);
+    fileInputRef.current?.click();
   };
 
   const handleRetry = () => {
@@ -235,16 +244,6 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
               Select a file from your phone to upload securely to your desktop. Your file will be encrypted before transfer.
             </p>
             <div className="flex flex-col items-center gap-3">
-              <div className="flex w-full max-w-xs gap-2">
-                <Button onClick={handleTakePhotoClick} size="sm" className="flex-1 gap-2">
-                  <Camera className="h-4 w-4" />
-                  Take Photo
-                </Button>
-                <Button onClick={handleChooseFromPhotosClick} size="sm" variant="outline" className="flex-1 gap-2">
-                  <File className="h-4 w-4" />
-                  Photo Library
-                </Button>
-              </div>
               <Button 
                 onClick={handleUploadClick}
                 size="lg"
@@ -253,6 +252,26 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
                 <Upload className="h-5 w-5" />
                 Upload File
               </Button>
+
+              {showPickerOptions && (
+                <div className="w-full max-w-xs bg-card border border-border rounded-lg p-3 space-y-2">
+                  <Button onClick={handleTakePhotoClick} size="sm" className="w-full gap-2">
+                    <Camera className="h-4 w-4" />
+                    Take Photo
+                  </Button>
+                  <Button onClick={handleChooseFromPhotosClick} size="sm" variant="outline" className="w-full gap-2">
+                    <File className="h-4 w-4" />
+                    Photo Library
+                  </Button>
+                  <Button onClick={handleGenericFileClick} size="sm" className="w-full gap-2">
+                    <Upload className="h-4 w-4" />
+                    Files
+                  </Button>
+                  <Button onClick={() => setShowPickerOptions(false)} size="sm" variant="ghost" className="w-full">
+                    Cancel
+                  </Button>
+                </div>
+              )}
             </div>
             <div className="text-center space-y-2">
               <p className="text-xs text-muted-foreground">

@@ -103,8 +103,9 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
       throw new Error('Session expired');
     }
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-    if (!allowedTypes.includes(data.fileType)) throw new Error('Invalid file type');
+    // Accept common iOS image types and allow empty/unknown fileType from some mobile browsers
+    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'image/heic', 'image/heif', 'image/jpg'];
+    if (data.fileType && !allowedTypes.includes(data.fileType)) throw new Error('Invalid file type');
     if (data.fileSize > 5 * 1024 * 1024) throw new Error('File too large');
 
     const payload = JSON.stringify({
