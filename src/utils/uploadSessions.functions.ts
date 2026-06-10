@@ -1,11 +1,8 @@
 import { createServerFn } from '@tanstack/react-start';
-import { createClient } from '@supabase/supabase-js';
 
-function getSupabase() {
-  const url = process.env.SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) throw new Error('Missing Supabase config');
-  return createClient(url, key);
+async function getSupabase() {
+  const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+  return supabaseAdmin;
 }
 
 function generateSessionId(): string {
@@ -15,7 +12,7 @@ function generateSessionId(): string {
 export const createUploadSession = createServerFn({ method: 'POST' })
   .inputValidator((data: { receiverPublicKey?: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = getSupabase();
+    const supabase = await getSupabase();
     const sessionId = generateSessionId();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
@@ -37,7 +34,7 @@ export const createUploadSession = createServerFn({ method: 'POST' })
 export const getUploadSession = createServerFn({ method: 'POST' })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = getSupabase();
+    const supabase = await getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
       .select('session_id, expires_at, status, file_name, file_type, file_size, receiver_public_key')
@@ -66,7 +63,7 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     senderPublicKey?: string;
   }) => data)
   .handler(async ({ data }) => {
-    const supabase = getSupabase();
+    const supabase = await getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
       .select('session_id, expires_at, status')
@@ -112,7 +109,7 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
 export const getUploadedFileData = createServerFn({ method: 'POST' })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = getSupabase();
+    const supabase = await getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
       .select('file_data, file_name, file_type, file_size')
@@ -148,7 +145,7 @@ export const getUploadedFileData = createServerFn({ method: 'POST' })
 export const deleteUploadSession = createServerFn({ method: 'POST' })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    const supabase = getSupabase();
+    const supabase = await getSupabase();
     await supabase.from('upload_sessions').delete().eq('session_id', data.sessionId);
     return { success: true };
   });
