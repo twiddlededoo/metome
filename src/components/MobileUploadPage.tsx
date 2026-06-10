@@ -254,22 +254,40 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
               </Button>
 
               {showPickerOptions && (
-                <div className="w-full max-w-xs bg-card border border-border rounded-lg p-3 space-y-2">
-                  <Button onClick={handleTakePhotoClick} size="sm" className="w-full gap-2">
-                    <Camera className="h-4 w-4" />
-                    Take Photo
-                  </Button>
-                  <Button onClick={handleChooseFromPhotosClick} size="sm" variant="outline" className="w-full gap-2">
-                    <File className="h-4 w-4" />
-                    Photo Library
-                  </Button>
-                  <Button onClick={handleGenericFileClick} size="sm" className="w-full gap-2">
-                    <Upload className="h-4 w-4" />
-                    Files
-                  </Button>
-                  <Button onClick={() => setShowPickerOptions(false)} size="sm" variant="ghost" className="w-full">
-                    Cancel
-                  </Button>
+                <div
+                  className="fixed inset-0 z-50 flex items-end justify-center"
+                  aria-hidden={!showPickerOptions}
+                  onClick={() => setShowPickerOptions(false)}
+                >
+                  <div className="absolute inset-0 bg-black/40" />
+
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    className="relative w-full max-w-md mx-auto pb-safe"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="bg-card border-t border-border rounded-t-xl shadow-xl p-4">
+                      <div className="mb-2 w-12 h-1.5 bg-muted rounded mx-auto" />
+                      <div className="space-y-2">
+                        <Button onClick={handleTakePhotoClick} size="md" className="w-full gap-2 justify-start">
+                          <Camera className="h-5 w-5" />
+                          Take Photo
+                        </Button>
+                        <Button onClick={handleChooseFromPhotosClick} size="md" variant="outline" className="w-full gap-2 justify-start">
+                          <File className="h-5 w-5" />
+                          Photo Library
+                        </Button>
+                        <Button onClick={handleGenericFileClick} size="md" className="w-full gap-2 justify-start">
+                          <Upload className="h-5 w-5" />
+                          Files
+                        </Button>
+                        <Button onClick={() => setShowPickerOptions(false)} size="md" variant="ghost" className="w-full">
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
