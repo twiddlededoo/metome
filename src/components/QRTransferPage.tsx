@@ -133,10 +133,48 @@ export function QRTransferPage() {
 
                 for (const entry of entries) {
                   try {
+                    // Support multiple shapes from different versions / DB serializations
+                    const encB64 = entry.encryptedFile ?? entry.encrypted_file ?? (() => {
+                      // Some older flows stored a JSON payload in file_data; try to parse
+                      try {
+                        const parsed = typeof entry === 'string' ? JSON.parse(entry) : entry;
+                        return parsed.encryptedFile || parsed.encrypted_file || parsed.file_data || null;
+                      } catch {
+                        return null;
+                      }
+                    })();
+
+                    if (!encB64) {
+                      console.error('No encrypted payload found for entry', entry);
+                      continue;
+                    }
+
+                    // IV may be stored as base64 string or array of numbers
+                    let ivArr: Uint8Array;
+                    if (typeof entry.iv === 'string') {
+                      // strip data: prefix if present
+                      const maybe = entry.iv as string;
+                      const cleaned = maybe.includes(',') ? maybe.split(',')[1] : maybe;
+                      ivArr = new Uint8Array(encryptionManager.base64ToArrayBuffer(cleaned));
+                    } else if (Array.isArray(entry.iv)) {
+                      ivArr = new Uint8Array(entry.iv);
+                    } else if (entry.iv && typeof entry.iv === 'object' && entry.iv.data) {
+                      // handle typed-array-like objects
+                      ivArr = new Uint8Array(entry.iv.data);
+                    } else {
+                      console.error('Invalid IV format for entry', entry);
+                      continue;
+                    }
+
+                    const senderPub = entry.senderPublicKey ?? entry.sender_public_key ?? (entry.sender ? entry.sender : null);
+
+                    // Encrypted payload may be a full data URL or plain base64
+                    const encClean = typeof encB64 === 'string' && encB64.includes(',') ? encB64.split(',')[1] : encB64;
+
                     const encryptedFile: EncryptedFile = {
-                      data: encryptionManager.base64ToArrayBuffer(entry.encryptedFile),
-                      iv: new Uint8Array(encryptionManager.base64ToArrayBuffer(entry.iv)),
-                      senderPublicKey: entry.senderPublicKey,
+                      data: encryptionManager.base64ToArrayBuffer(encClean),
+                      iv: ivArr,
+                      senderPublicKey: senderPub,
                     };
 
                     const decryptedBuffer = await encryptionManager.decryptReceivedFile(
@@ -145,11 +183,28 @@ export function QRTransferPage() {
                       sessionId
                     );
 
-                    const blob = encryptionManager.arrayBufferToBlob(decryptedBuffer, entry.fileType);
+                    const mime = entry.fileType ?? entry.file_type ?? 'application/octet-stream';
+                    const blob = encryptionManager.arrayBufferToBlob(decryptedBuffer, mime);
                     const dataUrl = URL.createObjectURL(blob);
-                    decryptedFiles.push({ name: entry.fileName, type: entry.fileType, size: entry.fileSize, dataUrl });
+                    decryptedFiles.push({ name: entry.fileName ?? entry.file_name ?? 'file', type: mime, size: entry.fileSize ?? entry.file_size ?? 0, dataUrl });
                   } catch (innerErr) {
                     console.error('Failed to decrypt one of the files:', innerErr);
+
+                    // Fallback: some older flows stored raw base64 file content rather than an encrypted payload.
+                    try {
+                      const maybeB64 = entry.encryptedFile ?? entry.encrypted_file ?? entry.file_data;
+                      if (typeof maybeB64 === 'string' && maybeB64.split(',').length) {
+                        const cleaned = maybeB64.includes(',') ? maybeB64.split(',')[1] : maybeB64;
+                        const ab = encryptionManager.base64ToArrayBuffer(cleaned);
+                        const mime = entry.fileType ?? entry.file_type ?? 'application/octet-stream';
+                        const blob = encryptionManager.arrayBufferToBlob(ab, mime);
+                        const dataUrl = URL.createObjectURL(blob);
+                        decryptedFiles.push({ name: entry.fileName ?? entry.file_name ?? 'file', type: mime, size: entry.fileSize ?? entry.file_size ?? 0, dataUrl });
+                        continue;
+                      }
+                    } catch (fallbackErr) {
+                      console.error('Fallback raw base64 handling failed:', fallbackErr);
+                    }
                   }
                 }
 
