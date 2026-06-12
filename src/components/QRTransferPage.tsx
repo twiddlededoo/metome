@@ -25,6 +25,7 @@ export function QRTransferPage() {
   const [sessionId, setSessionId] = useState<string>('');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [uploadedFile, setUploadedFile] = useState<UploadedFileInfo | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>([]);
   const [error, setError] = useState<string>('');
   const [timeRemaining, setTimeRemaining] = useState<number>(600); // 10 minutes
   const [receiverKeyPair, setReceiverKeyPair] = useState<KeyPair | null>(null);
