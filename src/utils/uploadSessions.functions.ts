@@ -64,7 +64,7 @@ export const getUploadSession = createServerFn({ method: 'POST' })
     const supabase = getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
-      .select('session_id, expires_at, status, file_name, file_type, file_size, receiver_public_key')
+      .select('session_id, expires_at, status, file_name, file_type, file_size, receiver_public_key, uploaded_at')
       .eq('session_id', data.sessionId)
       .single();
 
@@ -122,6 +122,7 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
         file_type: data.fileType,
         file_size: data.fileSize,
         file_data: payload,
+        uploaded_at: new Date().toISOString(),
       })
       .eq('session_id', data.sessionId);
 
@@ -136,7 +137,7 @@ export const getUploadedFileData = createServerFn({ method: 'POST' })
     const supabase = getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
-      .select('file_data, file_name, file_type, file_size')
+      .select('file_data, file_name, file_type, file_size, uploaded_at')
       .eq('session_id', data.sessionId)
       .eq('status', 'uploaded')
       .single();
