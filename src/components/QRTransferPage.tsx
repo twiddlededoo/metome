@@ -88,7 +88,30 @@ export function QRTransferPage() {
     }
   };
 
-  const handleDownloadFile = () => {
+  const handleDownloadFile = async () => {
+    if (uploadedFiles.length > 1) {
+      try {
+        const zip = new JSZip();
+        for (const f of uploadedFiles) {
+          if (!f.dataUrl) continue;
+          const resp = await fetch(f.dataUrl);
+          const blob = await resp.blob();
+          zip.file(f.name, blob);
+        }
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const zipUrl = URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        link.href = zipUrl;
+        link.download = `${sessionId || 'files'}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(zipUrl), 5000);
+        return;
+      } catch (err) {
+        console.error('Zip download failed, falling back to single:', err);
+      }
+    }
     if (uploadedFile && uploadedFile.dataUrl) {
       const link = document.createElement('a');
       link.href = uploadedFile.dataUrl;
