@@ -131,6 +131,7 @@ export function QRTransferPage() {
     setSessionId('');
     setQrCodeUrl('');
     setUploadedFile(null);
+    setUploadedFiles([]);
     setError('');
     setTimeRemaining(600);
     generateNewQR();
