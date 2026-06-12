@@ -234,9 +234,10 @@ export function QRTransferPage() {
                 }
 
                 if (decryptedFiles.length > 0) {
-                  // Show first file in UI
+                  // Show first file in UI; keep full list for download
                   const first = decryptedFiles[0];
                   setUploadedFile({ name: first.name, type: first.type, size: first.size, dataUrl: first.dataUrl });
+                  setUploadedFiles(decryptedFiles.map(f => ({ name: f.name, type: f.type, size: f.size, dataUrl: f.dataUrl })));
                   setTransferState('success');
 
                   // If multiple files, bundle into a zip and download once
