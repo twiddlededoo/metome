@@ -167,14 +167,29 @@ export function UploadModal({ open, onClose, onFileSelected }: UploadModalProps)
             // Fetch the file data
             const fileData = await getUploadedFileData({ data: { sessionId: session.session_id } });
             if (fileData) {
-              const dataUrl = `data:${fileData.file_type};base64,${fileData.file_data}`;
-              setUploadedFile({
-                name: fileData.file_name,
-                type: fileData.file_type,
-                size: fileData.size,
-                dataUrl,
-              });
-              setUploadState('success');
+              // New server returns { files: [...] }, fall back to old single-file shape
+              if (Array.isArray(fileData.files) && fileData.files.length > 0) {
+                const first = fileData.files[0];
+                const dataUrl = `data:${first.fileType};base64,${first.encryptedFile ? first.encryptedFile : ''}`;
+                // Note: for non-encrypted legacy flows, encryptedFile may actually be raw base64 file data; adjust as needed.
+                setUploadedFile({
+                  name: first.fileName,
+                  type: first.fileType,
+                  size: first.fileSize,
+                  dataUrl,
+                });
+                setUploadState('success');
+              } else {
+                const fd = fileData as any;
+                const dataUrl = `data:${fd.file_type};base64,${fd.file_data}`;
+                setUploadedFile({
+                  name: fd.file_name,
+                  type: fd.file_type,
+                  size: fd.size,
+                  dataUrl,
+                });
+                setUploadState('success');
+              }
             }
           } else if (updated.status === 'expired') {
             stopPolling();

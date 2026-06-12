@@ -127,36 +127,53 @@ export function QRTransferPage() {
             try {
               const fileData = await getUploadedFileData({ data: { sessionId } });
               if (fileData && receiverKeyPair) {
-                // Parse encrypted file data
-                const encryptedFile: EncryptedFile = {
-                  data: encryptionManager.base64ToArrayBuffer(fileData.encrypted_file),
-                  iv: new Uint8Array(encryptionManager.base64ToArrayBuffer(fileData.iv)),
-                  senderPublicKey: fileData.sender_public_key,
-                };
+                // fileData.files is expected to be an array of uploaded entries
+                const entries = Array.isArray(fileData.files) ? fileData.files : [];
+                const decryptedFiles: Array<{ name: string; type: string; size: number; dataUrl: string }> = [];
 
-                // Decrypt the file
-                const decryptedBuffer = await encryptionManager.decryptReceivedFile(
-                  encryptedFile,
-                  receiverKeyPair.privateKey,
-                  sessionId
-                );
+                for (const entry of entries) {
+                  try {
+                    const encryptedFile: EncryptedFile = {
+                      data: encryptionManager.base64ToArrayBuffer(entry.encryptedFile),
+                      iv: new Uint8Array(encryptionManager.base64ToArrayBuffer(entry.iv)),
+                      senderPublicKey: entry.senderPublicKey,
+                    };
 
-                // Create blob and data URL
-                const blob = encryptionManager.arrayBufferToBlob(decryptedBuffer, fileData.file_type);
-                const dataUrl = URL.createObjectURL(blob);
+                    const decryptedBuffer = await encryptionManager.decryptReceivedFile(
+                      encryptedFile,
+                      receiverKeyPair.privateKey,
+                      sessionId
+                    );
 
-                setUploadedFile({
-                  name: fileData.file_name,
-                  type: fileData.file_type,
-                  size: fileData.size,
-                  dataUrl,
-                });
-                setTransferState('success');
-                
-                // Auto-download after 2 seconds
-                setTimeout(() => {
-                  handleDownloadFile();
-                }, 2000);
+                    const blob = encryptionManager.arrayBufferToBlob(decryptedBuffer, entry.fileType);
+                    const dataUrl = URL.createObjectURL(blob);
+                    decryptedFiles.push({ name: entry.fileName, type: entry.fileType, size: entry.fileSize, dataUrl });
+                  } catch (innerErr) {
+                    console.error('Failed to decrypt one of the files:', innerErr);
+                  }
+                }
+
+                if (decryptedFiles.length > 0) {
+                  // Show first file in UI
+                  const first = decryptedFiles[0];
+                  setUploadedFile({ name: first.name, type: first.type, size: first.size, dataUrl: first.dataUrl });
+                  setTransferState('success');
+
+                  // Auto-download all decrypted files sequentially
+                  (async () => {
+                    for (const f of decryptedFiles) {
+                      const link = document.createElement('a');
+                      link.href = f.dataUrl;
+                      link.download = f.name;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      // small pause between downloads
+                      // eslint-disable-next-line no-await-in-loop
+                      await new Promise((r) => setTimeout(r, 500));
+                    }
+                  })();
+                }
               }
             } catch (decryptError) {
               console.error('Decryption failed:', decryptError);

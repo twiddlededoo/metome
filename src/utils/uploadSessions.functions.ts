@@ -87,12 +87,14 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     encryptedFile?: string;
     iv?: string;
     senderPublicKey?: string;
+    // If true, mark session as complete (uploaded) after this file
+    finalize?: boolean;
   }) => data)
   .handler(async ({ data }) => {
     const supabase = getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
-      .select('session_id, expires_at, status')
+      .select('session_id, expires_at, status, file_data')
       .eq('session_id', data.sessionId)
       .single();
 
@@ -108,21 +110,45 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     if (data.fileType && !allowedTypes.includes(data.fileType)) throw new Error('Invalid file type');
     if (data.fileSize > 5 * 1024 * 1024) throw new Error('File too large');
 
-    const payload = JSON.stringify({
+    // Build file entry
+    const fileEntry = {
+      fileName: data.fileName,
+      fileType: data.fileType,
+      fileSize: data.fileSize,
       encryptedFile: data.encryptedFile,
       iv: data.iv,
       senderPublicKey: data.senderPublicKey,
-    });
+      uploadedAt: new Date().toISOString(),
+    };
+
+    // Parse existing file_data which may be a JSON array
+    let existing: any[] = [];
+    try {
+      const parsed = JSON.parse(session.file_data || 'null');
+      if (Array.isArray(parsed)) existing = parsed;
+      else if (parsed && typeof parsed === 'object') existing = [parsed];
+    } catch {
+      existing = [];
+    }
+
+    existing.push(fileEntry);
+
+    const updatePayload: any = {
+      file_data: JSON.stringify(existing),
+    } as any;
+
+    // If this upload finalizes the session, mark uploaded and save summary fields
+    if (data.finalize) {
+      updatePayload.status = 'uploaded';
+      // Save last file's metadata for compatibility
+      updatePayload.file_name = data.fileName;
+      updatePayload.file_type = data.fileType;
+      updatePayload.file_size = data.fileSize;
+    }
 
     const { error: updateError } = await supabase
       .from('upload_sessions')
-      .update({
-        status: 'uploaded',
-        file_name: data.fileName,
-        file_type: data.fileType,
-        file_size: data.fileSize,
-        file_data: payload,
-      })
+      .update(updatePayload)
       .eq('session_id', data.sessionId);
 
     if (updateError) throw new Error('Failed to save upload');
@@ -136,34 +162,21 @@ export const getUploadedFileData = createServerFn({ method: 'POST' })
     const supabase = getSupabase();
     const { data: session, error } = await supabase
       .from('upload_sessions')
-      .select('file_data, file_name, file_type, file_size')
+      .select('file_data')
       .eq('session_id', data.sessionId)
       .eq('status', 'uploaded')
       .single();
 
     if (error || !session) return null;
 
-    let encrypted_file = '';
-    let iv = '';
-    let sender_public_key = '';
     try {
-      const parsed = JSON.parse(session.file_data || '{}');
-      encrypted_file = parsed.encryptedFile || '';
-      iv = parsed.iv || '';
-      sender_public_key = parsed.senderPublicKey || '';
+      const parsed = JSON.parse(session.file_data || '[]');
+      // Ensure array of entries with expected fields
+      const files = Array.isArray(parsed) ? parsed : [parsed];
+      return { files, file_data: session.file_data };
     } catch {
-      // ignore
+      return null;
     }
-
-    return {
-      encrypted_file,
-      iv,
-      sender_public_key,
-      file_data: session.file_data,
-      file_name: session.file_name!,
-      file_type: session.file_type!,
-      size: session.file_size!,
-    };
   });
 
 export const deleteUploadSession = createServerFn({ method: 'POST' })

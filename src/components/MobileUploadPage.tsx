@@ -18,7 +18,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
   const photoLibraryRef = useRef<HTMLInputElement>(null);
   const [showPickerOptions, setShowPickerOptions] = useState(false);
 
-  const handleFileSelect = useCallback(async (file: File) => {
+  const handleFileSelect = useCallback(async (file: File, finalize?: boolean) => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
     try {
       setError('');
@@ -78,6 +78,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
           encryptedFile: encryptedBase64,
           iv: ivBase64,
           senderPublicKey: encryptedFile.senderPublicKey,
+          finalize: finalize ?? false,
         },
       });
 
@@ -94,10 +95,19 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
   }, [sessionId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleFileSelect(file);
-    }
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Process multiple files sequentially so each upload completes before starting the next
+    (async () => {
+      const fileArray = Array.from(files);
+      for (let i = 0; i < fileArray.length; i++) {
+        const f = fileArray[i];
+        const isLast = i === fileArray.length - 1;
+        // eslint-disable-next-line no-await-in-loop
+        await handleFileSelect(f, isLast);
+      }
+    })();
   };
 
   const handleUploadClick = () => {
@@ -351,6 +361,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
         type="file"
         className="hidden"
         accept="image/*"
+        multiple
         onChange={handleFileChange}
       />
       <input
@@ -359,6 +370,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
         className="hidden"
         // Use a generic accept so Android does not prompt the camera again
         accept="*/*"
+        multiple
         onChange={handleFileChange}
       />
     </div>
