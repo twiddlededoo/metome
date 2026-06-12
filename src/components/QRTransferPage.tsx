@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Smartphone, Loader2, CheckCircle, AlertCircle, RefreshCw, Download, QrCode, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import QRCodeLib from 'qrcode';
+import JSZip from 'jszip';
 import {
   createUploadSession,
   getUploadSession,
@@ -214,20 +215,47 @@ export function QRTransferPage() {
                   setUploadedFile({ name: first.name, type: first.type, size: first.size, dataUrl: first.dataUrl });
                   setTransferState('success');
 
-                  // Auto-download all decrypted files sequentially
-                  (async () => {
-                    for (const f of decryptedFiles) {
+                  // If multiple files, bundle into a zip and download once
+                  if (decryptedFiles.length === 1) {
+                    const f = decryptedFiles[0];
+                    const link = document.createElement('a');
+                    link.href = f.dataUrl;
+                    link.download = f.name;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  } else {
+                    try {
+                      const zip = new JSZip();
+                      for (const f of decryptedFiles) {
+                        // fetch blob from object URL
+                        const resp = await fetch(f.dataUrl);
+                        const blob = await resp.blob();
+                        zip.file(f.name, blob);
+                      }
+                      const zipBlob = await zip.generateAsync({ type: 'blob' });
+                      const zipUrl = URL.createObjectURL(zipBlob);
                       const link = document.createElement('a');
-                      link.href = f.dataUrl;
-                      link.download = f.name;
+                      link.href = zipUrl;
+                      link.download = `${sessionId || 'files'}.zip`;
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
-                      // small pause between downloads
-                      // eslint-disable-next-line no-await-in-loop
-                      await new Promise((r) => setTimeout(r, 500));
+                      // revoke URL after a short timeout
+                      setTimeout(() => URL.revokeObjectURL(zipUrl), 5000);
+                    } catch (zipErr) {
+                      console.error('Failed to create zip of decrypted files:', zipErr);
+                      // Fallback: trigger downloads individually
+                      for (const f of decryptedFiles) {
+                        const link = document.createElement('a');
+                        link.href = f.dataUrl;
+                        link.download = f.name;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }
                     }
-                  })();
+                  }
                 }
               }
             } catch (decryptError) {
