@@ -428,6 +428,11 @@ export function QRTransferPage() {
                     <p className="text-xs text-muted-foreground">
                       {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
+                    {uploadedFiles.length > 1 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        +{uploadedFiles.length - 1} more file{uploadedFiles.length > 2 ? 's' : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -436,7 +441,7 @@ export function QRTransferPage() {
             <div className="flex gap-3">
               <Button variant="outline" onClick={handleDownloadFile}>
                 <Download className="h-4 w-4 mr-2" />
-                Download Again
+                {uploadedFiles.length > 1 ? 'Download All (.zip)' : 'Download Again'}
               </Button>
               <Button onClick={handleReset}>
                 <QrCode className="h-4 w-4 mr-2" />
