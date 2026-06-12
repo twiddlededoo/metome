@@ -25,6 +25,7 @@ export function QRTransferPage() {
   const [sessionId, setSessionId] = useState<string>('');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [uploadedFile, setUploadedFile] = useState<UploadedFileInfo | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>([]);
   const [error, setError] = useState<string>('');
   const [timeRemaining, setTimeRemaining] = useState<number>(600); // 10 minutes
   const [receiverKeyPair, setReceiverKeyPair] = useState<KeyPair | null>(null);
@@ -87,7 +88,30 @@ export function QRTransferPage() {
     }
   };
 
-  const handleDownloadFile = () => {
+  const handleDownloadFile = async () => {
+    if (uploadedFiles.length > 1) {
+      try {
+        const zip = new JSZip();
+        for (const f of uploadedFiles) {
+          if (!f.dataUrl) continue;
+          const resp = await fetch(f.dataUrl);
+          const blob = await resp.blob();
+          zip.file(f.name, blob);
+        }
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const zipUrl = URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        link.href = zipUrl;
+        link.download = `${sessionId || 'files'}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(zipUrl), 5000);
+        return;
+      } catch (err) {
+        console.error('Zip download failed, falling back to single:', err);
+      }
+    }
     if (uploadedFile && uploadedFile.dataUrl) {
       const link = document.createElement('a');
       link.href = uploadedFile.dataUrl;
@@ -107,6 +131,7 @@ export function QRTransferPage() {
     setSessionId('');
     setQrCodeUrl('');
     setUploadedFile(null);
+    setUploadedFiles([]);
     setError('');
     setTimeRemaining(600);
     generateNewQR();
@@ -210,9 +235,10 @@ export function QRTransferPage() {
                 }
 
                 if (decryptedFiles.length > 0) {
-                  // Show first file in UI
+                  // Show first file in UI; keep full list for download
                   const first = decryptedFiles[0];
                   setUploadedFile({ name: first.name, type: first.type, size: first.size, dataUrl: first.dataUrl });
+                  setUploadedFiles(decryptedFiles.map(f => ({ name: f.name, type: f.type, size: f.size, dataUrl: f.dataUrl })));
                   setTransferState('success');
 
                   // If multiple files, bundle into a zip and download once
@@ -402,6 +428,11 @@ export function QRTransferPage() {
                     <p className="text-xs text-muted-foreground">
                       {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
+                    {uploadedFiles.length > 1 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        +{uploadedFiles.length - 1} more file{uploadedFiles.length > 2 ? 's' : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -410,7 +441,7 @@ export function QRTransferPage() {
             <div className="flex gap-3">
               <Button variant="outline" onClick={handleDownloadFile}>
                 <Download className="h-4 w-4 mr-2" />
-                Download Again
+                {uploadedFiles.length > 1 ? 'Download All (.zip)' : 'Download Again'}
               </Button>
               <Button onClick={handleReset}>
                 <QrCode className="h-4 w-4 mr-2" />
