@@ -26,6 +26,7 @@ export type Database = {
           receiver_public_key: string | null
           session_id: string
           status: string
+          uploaded_at: string | null
         }
         Insert: {
           created_at?: string
@@ -38,6 +39,7 @@ export type Database = {
           receiver_public_key?: string | null
           session_id: string
           status?: string
+          uploaded_at?: string | null
         }
         Update: {
           created_at?: string
@@ -50,6 +52,7 @@ export type Database = {
           receiver_public_key?: string | null
           session_id?: string
           status?: string
+          uploaded_at?: string | null
         }
         Relationships: []
       }
