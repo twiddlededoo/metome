@@ -282,7 +282,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
                       <div className="space-y-3">
                         <Button
                           onClick={handleTakePhotoClick}
-                          size="md"
+                          size="lg"
                           className="w-full py-4 px-4 text-lg rounded-lg flex items-center gap-3 justify-start"
                         >
                           <Camera className="h-6 w-6" />
@@ -291,7 +291,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
 
                         <Button
                           onClick={handleChooseFromPhotosClick}
-                          size="md"
+                          size="lg"
                           variant="outline"
                           className="w-full py-4 px-4 text-lg rounded-lg flex items-center gap-3 justify-start"
                         >
@@ -301,7 +301,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
 
                         <Button
                           onClick={handleGenericFileClick}
-                          size="md"
+                          size="lg"
                           className="w-full py-4 px-4 text-lg rounded-lg flex items-center gap-3 justify-start"
                         >
                           <Upload className="h-6 w-6" />
@@ -310,7 +310,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
 
                         <Button
                           onClick={() => setShowPickerOptions(false)}
-                          size="md"
+                          size="default"
                           variant="ghost"
                           className="w-full py-3 text-base"
                         >
