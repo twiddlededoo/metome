@@ -108,9 +108,8 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
       throw new Error('Session expired');
     }
 
-    // Accept common iOS image types and allow empty/unknown fileType from some mobile browsers
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'image/heic', 'image/heif', 'image/jpg'];
-    if (data.fileType && !allowedTypes.includes(data.fileType)) throw new Error('Invalid file type');
+    // Allow any file type — mobile browsers and Android file pickers may provide a wide variety
+    // of MIME types; don't restrict here. Keep file size limit enforced.
     if (data.fileSize > 50 * 1024 * 1024) throw new Error('File too large');
 
     // Build file entry

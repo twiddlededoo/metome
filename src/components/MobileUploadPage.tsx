@@ -232,12 +232,20 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
               <Lock className="h-4 w-4 text-green-600" />
               <span className="text-sm text-green-600 font-medium">End-to-end encrypted</span>
             </div>
-            <p className="text-lg text-muted-foreground mb-8 text-center">
+            <p className="text-lg text-muted-foreground mb-4 text-center">
               Your file has been securely encrypted and uploaded.
             </p>
-            <p className="text-sm text-muted-foreground text-center max-w-md">
+            <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
               Only the intended receiver can decrypt and access this file.
             </p>
+            <div className="flex gap-3 w-full max-w-xs">
+              <Button onClick={() => setShowPickerOptions(true)} className="flex-1">
+                Upload another file
+              </Button>
+              <Button onClick={() => { setUploadState('idle'); setFileName(''); setProgress(0); }} variant="outline" className="flex-1">
+                Done
+              </Button>
+            </div>
           </div>
         );
 
@@ -342,7 +350,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
             </div>
             <div className="text-center space-y-2">
               <p className="text-xs text-muted-foreground">
-                Supported formats: JPG, PNG, PDF
+                Supported formats: Any file type
               </p>
               <p className="text-xs text-muted-foreground">
                 Maximum file size: 50MB
@@ -370,7 +378,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
         ref={photoCaptureRef}
         type="file"
         className="hidden"
-        accept="image/*"
+        accept="*/*"
         capture="environment"
         onChange={handleFileChange}
       />
@@ -378,7 +386,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
         ref={photoLibraryRef}
         type="file"
         className="hidden"
-        accept="image/*"
+        accept="*/*"
         multiple
         onChange={handleFileChange}
       />
