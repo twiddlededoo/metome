@@ -19,6 +19,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
   const photoCaptureRef = useRef<HTMLInputElement>(null);
   const photoLibraryRef = useRef<HTMLInputElement>(null);
   const [showPickerOptions, setShowPickerOptions] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const handleFileSelect = useCallback(async (file: File, finalize?: boolean) => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
