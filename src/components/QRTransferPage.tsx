@@ -27,6 +27,8 @@ export function QRTransferPage() {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [uploadedFile, setUploadedFile] = useState<UploadedFileInfo | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>([]);
+  // Track processed uploadedAt timestamps to avoid duplicates when polling
+  const processedUploadsRef = useRef<Set<string>>(new Set());
   const [error, setError] = useState<string>('');
   const [timeRemaining, setTimeRemaining] = useState<number>(600); // 10 minutes
   const [receiverKeyPair, setReceiverKeyPair] = useState<KeyPair | null>(null);
@@ -140,164 +142,114 @@ export function QRTransferPage() {
 
   // Poll for file upload
   useEffect(() => {
-    if (sessionId && transferState === 'waiting') {
+    if (sessionId && (transferState === 'waiting' || transferState === 'success' || transferState === 'decrypting')) {
       pollRef.current = setInterval(async () => {
         try {
           const updated = await getUploadSession({ data: { sessionId } });
           if (!updated) return;
-
-          if (updated.status === 'uploaded') {
-            stopPolling();
-            stopTimer();
+          // If the session has any uploaded file_data, decrypt and append new entries.
+          const hasFileData = (updated as any).file_data || null;
+          if (hasFileData && receiverKeyPair) {
             setTransferState('decrypting');
-            
             try {
               const fileData = await getUploadedFileData({ data: { sessionId } });
-              if (fileData && receiverKeyPair) {
-                // fileData.files is expected to be an array of uploaded entries
-                const entries = Array.isArray(fileData.files) ? fileData.files : [];
-                const decryptedFiles: Array<{ name: string; type: string; size: number; dataUrl: string }> = [];
+              if (!fileData) return;
+              const entries = Array.isArray(fileData.files) ? fileData.files : [];
+              const newlyDecrypted: Array<{ name: string; type: string; size: number; dataUrl: string; uploadedAt?: string }> = [];
 
-                for (const entry of entries) {
-                  try {
-                    // Support multiple shapes from different versions / DB serializations
-                    const encB64 = entry.encryptedFile ?? entry.encrypted_file ?? (() => {
-                      // Some older flows stored a JSON payload in file_data; try to parse
-                      try {
-                        const parsed = typeof entry === 'string' ? JSON.parse(entry) : entry;
-                        return parsed.encryptedFile || parsed.encrypted_file || parsed.file_data || null;
-                      } catch {
-                        return null;
-                      }
-                    })();
-
-                    if (!encB64) {
-                      console.error('No encrypted payload found for entry', entry);
-                      continue;
-                    }
-
-                    // IV may be stored as base64 string or array of numbers
-                    let ivArr: Uint8Array;
-                    if (typeof entry.iv === 'string') {
-                      // strip data: prefix if present
-                      const maybe = entry.iv as string;
-                      const cleaned = maybe.includes(',') ? maybe.split(',')[1] : maybe;
-                      ivArr = new Uint8Array(encryptionManager.base64ToArrayBuffer(cleaned));
-                    } else if (Array.isArray(entry.iv)) {
-                      ivArr = new Uint8Array(entry.iv);
-                    } else if (entry.iv && typeof entry.iv === 'object' && entry.iv.data) {
-                      // handle typed-array-like objects
-                      ivArr = new Uint8Array(entry.iv.data);
-                    } else {
-                      console.error('Invalid IV format for entry', entry);
-                      continue;
-                    }
-
-                    const senderPub = entry.senderPublicKey ?? entry.sender_public_key ?? (entry.sender ? entry.sender : null);
-
-                    // Encrypted payload may be a full data URL or plain base64
-                    const encClean = typeof encB64 === 'string' && encB64.includes(',') ? encB64.split(',')[1] : encB64;
-
-                    const encryptedFile: EncryptedFile = {
-                      data: encryptionManager.base64ToArrayBuffer(encClean),
-                      iv: ivArr,
-                      senderPublicKey: senderPub,
-                    };
-
-                    let decryptedBuffer = await encryptionManager.decryptReceivedFile(
-                      encryptedFile,
-                      receiverKeyPair.privateKey,
-                      sessionId
-                    );
-
-                    // If the sender compressed the payload before encryption, decompress after decryption
-                    if (entry.compressed) {
-                      try {
-                        const unzipped = pako.ungzip(new Uint8Array(decryptedBuffer));
-                        const u8 = unzipped instanceof Uint8Array ? unzipped : new Uint8Array(unzipped);
-                        decryptedBuffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
-                      } catch (decompErr) {
-                        console.error('Decompression failed for entry', entry.fileName ?? entry.file_name, decompErr);
-                        // continue with decryptedBuffer as-is
-                      }
-                    }
-
-                    const mime = entry.fileType ?? entry.file_type ?? 'application/octet-stream';
-                    const blob = encryptionManager.arrayBufferToBlob(decryptedBuffer, mime);
-                    const dataUrl = URL.createObjectURL(blob);
-                    decryptedFiles.push({ name: entry.fileName ?? entry.file_name ?? 'file', type: mime, size: entry.fileSize ?? entry.file_size ?? 0, dataUrl });
-                  } catch (innerErr) {
-                    console.error('Failed to decrypt one of the files:', innerErr);
-
-                    // Fallback: some older flows stored raw base64 file content rather than an encrypted payload.
+              for (const entry of entries) {
+                const uploadedAt = entry.uploadedAt ?? entry.uploaded_at ?? null;
+                if (uploadedAt && processedUploadsRef.current.has(uploadedAt)) continue;
+                try {
+                  // Support multiple shapes from different versions / DB serializations
+                  const encB64 = entry.encryptedFile ?? entry.encrypted_file ?? (() => {
                     try {
-                      const maybeB64 = entry.encryptedFile ?? entry.encrypted_file ?? entry.file_data;
-                      if (typeof maybeB64 === 'string' && maybeB64.split(',').length) {
-                        const cleaned = maybeB64.includes(',') ? maybeB64.split(',')[1] : maybeB64;
-                        const ab = encryptionManager.base64ToArrayBuffer(cleaned);
-                        const mime = entry.fileType ?? entry.file_type ?? 'application/octet-stream';
-                        const blob = encryptionManager.arrayBufferToBlob(ab, mime);
-                        const dataUrl = URL.createObjectURL(blob);
-                        decryptedFiles.push({ name: entry.fileName ?? entry.file_name ?? 'file', type: mime, size: entry.fileSize ?? entry.file_size ?? 0, dataUrl });
-                        continue;
-                      }
-                    } catch (fallbackErr) {
-                      console.error('Fallback raw base64 handling failed:', fallbackErr);
+                      const parsed = typeof entry === 'string' ? JSON.parse(entry) : entry;
+                      return parsed.encryptedFile || parsed.encrypted_file || parsed.file_data || null;
+                    } catch {
+                      return null;
                     }
+                  })();
+
+                  if (!encB64) {
+                    console.error('No encrypted payload found for entry', entry);
+                    continue;
+                  }
+
+                  // IV may be stored as base64 string or array of numbers
+                  let ivArr: Uint8Array;
+                  if (typeof entry.iv === 'string') {
+                    const maybe = entry.iv as string;
+                    const cleaned = maybe.includes(',') ? maybe.split(',')[1] : maybe;
+                    ivArr = new Uint8Array(encryptionManager.base64ToArrayBuffer(cleaned));
+                  } else if (Array.isArray(entry.iv)) {
+                    ivArr = new Uint8Array(entry.iv);
+                  } else if (entry.iv && typeof entry.iv === 'object' && entry.iv.data) {
+                    ivArr = new Uint8Array(entry.iv.data);
+                  } else {
+                    console.error('Invalid IV format for entry', entry);
+                    continue;
+                  }
+
+                  const senderPub = entry.senderPublicKey ?? entry.sender_public_key ?? (entry.sender ? entry.sender : null);
+                  const encClean = typeof encB64 === 'string' && encB64.includes(',') ? encB64.split(',')[1] : encB64;
+
+                  const encryptedFile: EncryptedFile = {
+                    data: encryptionManager.base64ToArrayBuffer(encClean),
+                    iv: ivArr,
+                    senderPublicKey: senderPub,
+                  };
+
+                  let decryptedBuffer = await encryptionManager.decryptReceivedFile(
+                    encryptedFile,
+                    receiverKeyPair.privateKey,
+                    sessionId
+                  );
+
+                  if (entry.compressed) {
+                    try {
+                      const unzipped = pako.ungzip(new Uint8Array(decryptedBuffer));
+                      const u8 = unzipped instanceof Uint8Array ? unzipped : new Uint8Array(unzipped);
+                      decryptedBuffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+                    } catch (decompErr) {
+                      console.error('Decompression failed for entry', entry.fileName ?? entry.file_name, decompErr);
+                    }
+                  }
+
+                  const mime = entry.fileType ?? entry.file_type ?? 'application/octet-stream';
+                  const blob = encryptionManager.arrayBufferToBlob(decryptedBuffer, mime);
+                  const dataUrl = URL.createObjectURL(blob);
+                  newlyDecrypted.push({ name: entry.fileName ?? entry.file_name ?? 'file', type: mime, size: entry.fileSize ?? entry.file_size ?? 0, dataUrl, uploadedAt });
+                } catch (innerErr) {
+                  console.error('Failed to decrypt one of the files:', innerErr);
+                  // Fallback: some older flows stored raw base64 file content rather than an encrypted payload.
+                  try {
+                    const maybeB64 = entry.encryptedFile ?? entry.encrypted_file ?? entry.file_data;
+                    if (typeof maybeB64 === 'string' && maybeB64.split(',').length) {
+                      const cleaned = maybeB64.includes(',') ? maybeB64.split(',')[1] : maybeB64;
+                      const ab = encryptionManager.base64ToArrayBuffer(cleaned);
+                      const mime = entry.fileType ?? entry.file_type ?? 'application/octet-stream';
+                      const blob = encryptionManager.arrayBufferToBlob(ab, mime);
+                      const dataUrl = URL.createObjectURL(blob);
+                      newlyDecrypted.push({ name: entry.fileName ?? entry.file_name ?? 'file', type: mime, size: entry.fileSize ?? entry.file_size ?? 0, dataUrl, uploadedAt });
+                      continue;
+                    }
+                  } catch (fallbackErr) {
+                    console.error('Fallback raw base64 handling failed:', fallbackErr);
                   }
                 }
+              }
 
-                if (decryptedFiles.length > 0) {
-                  console.log('Decrypted files ready', decryptedFiles.map(d => d.name));
-                  // Show first file in UI; keep full list for download
-                  const first = decryptedFiles[0];
-                  setUploadedFile({ name: first.name, type: first.type, size: first.size, dataUrl: first.dataUrl });
-                  setUploadedFiles(decryptedFiles.map(f => ({ name: f.name, type: f.type, size: f.size, dataUrl: f.dataUrl })));
-                  setTransferState('success');
-
-                  // If multiple files, bundle into a zip and download once
-                  if (decryptedFiles.length === 1) {
-                    const f = decryptedFiles[0];
-                    const link = document.createElement('a');
-                    link.href = f.dataUrl;
-                    link.download = f.name;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                  } else {
-                    console.log('Creating zip for', decryptedFiles.length, 'files');
-                    try {
-                      const zip = new JSZip();
-                      for (const f of decryptedFiles) {
-                        // fetch blob from object URL
-                        const resp = await fetch(f.dataUrl);
-                        const blob = await resp.blob();
-                        zip.file(f.name, blob);
-                      }
-                      const zipBlob = await zip.generateAsync({ type: 'blob' });
-                      console.log('Zip generated, size=', zipBlob.size);
-                      const zipUrl = URL.createObjectURL(zipBlob);
-                      const link = document.createElement('a');
-                      link.href = zipUrl;
-                      link.download = `${sessionId || 'files'}.zip`;
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      // revoke URL after a short timeout
-                      setTimeout(() => URL.revokeObjectURL(zipUrl), 5000);
-                    } catch (zipErr) {
-                      console.error('Failed to create zip of decrypted files:', zipErr);
-                      // Fallback: trigger downloads individually
-                      for (const f of decryptedFiles) {
-                        const link = document.createElement('a');
-                        link.href = f.dataUrl;
-                        link.download = f.name;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }
-                    }
-                  }
+              if (newlyDecrypted.length > 0) {
+                console.log('New decrypted files ready', newlyDecrypted.map(d => d.name));
+                setUploadedFiles(prev => {
+                  const combined = [...prev, ...newlyDecrypted.map(d => ({ name: d.name, type: d.type, size: d.size, dataUrl: d.dataUrl }))];
+                  return combined;
+                });
+                setUploadedFile(prev => prev ?? ({ name: newlyDecrypted[0].name, type: newlyDecrypted[0].type, size: newlyDecrypted[0].size, dataUrl: newlyDecrypted[0].dataUrl }));
+                setTransferState('success');
+                for (const d of newlyDecrypted) {
+                  if (d.uploadedAt) processedUploadsRef.current.add(d.uploadedAt);
                 }
               }
             } catch (decryptError) {
@@ -305,10 +257,17 @@ export function QRTransferPage() {
               setError('Failed to decrypt file. The file may be corrupted or tampered with.');
               setTransferState('error');
             }
-          } else if (updated.status === 'expired') {
+          }
+
+          if (updated.status === 'expired') {
             stopPolling();
             stopTimer();
             setTransferState('expired');
+          }
+          // If session was finalized, stop polling after processing
+          if ((updated as any).status === 'uploaded') {
+            stopPolling();
+            stopTimer();
           }
         } catch {
           // ignore polling errors
