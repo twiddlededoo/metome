@@ -121,9 +121,9 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
       const fileArray = Array.from(files);
       for (let i = 0; i < fileArray.length; i++) {
         const f = fileArray[i];
-        // Always upload files without finalizing — user will explicitly finalize via "Done"
+        const isLast = i === fileArray.length - 1;
         // eslint-disable-next-line no-await-in-loop
-        await handleFileSelect(f, false);
+        await handleFileSelect(f, isLast);
       }
     })();
   };
@@ -232,28 +232,15 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
               <Lock className="h-4 w-4 text-green-600" />
               <span className="text-sm text-green-600 font-medium">End-to-end encrypted</span>
             </div>
-            <p className="text-lg text-muted-foreground mb-4 text-center">
+            <p className="text-lg text-muted-foreground mb-8 text-center">
               Your file has been securely encrypted and uploaded.
             </p>
-            <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
+            <p className="text-sm text-muted-foreground text-center max-w-md">
               Only the intended receiver can decrypt and access this file.
             </p>
-            <div className="flex gap-3 w-full max-w-xs">
-              <Button onClick={handleGenericFileClick} className="flex-1">
-                Upload another file
-              </Button>
-              <Button onClick={async () => {
-                try {
-                  // Finalize the session on server so receiver can fetch files
-                  await finalizeUploadSession({ data: { sessionId } });
-                } catch (e) {
-                  console.error('Failed to finalize session:', e);
-                }
-                setUploadState('idle');
-                setFileName('');
-                setProgress(0);
-              }} variant="outline" className="flex-1">
-                Done
+            <div className="mt-6">
+              <Button onClick={() => { window.location.href = '/'; }}>
+                Scan another QR
               </Button>
             </div>
           </div>
