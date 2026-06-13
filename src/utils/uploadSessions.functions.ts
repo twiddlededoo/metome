@@ -262,6 +262,17 @@ export const deleteUploadSession = createServerFn({ method: 'POST' })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
     const supabase = getSupabase();
+    try {
+      const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+      const { data: list } = await supabaseAdmin.storage.from('encrypted-uploads').list(data.sessionId);
+      if (list && list.length) {
+        await supabaseAdmin.storage
+          .from('encrypted-uploads')
+          .remove(list.map(o => `${data.sessionId}/${o.name}`));
+      }
+    } catch (e) {
+      console.warn('Storage cleanup failed (non-fatal):', e);
+    }
     await supabase.from('upload_sessions').delete().eq('session_id', data.sessionId);
     return { success: true };
   });
