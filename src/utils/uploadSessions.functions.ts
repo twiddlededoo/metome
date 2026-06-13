@@ -150,21 +150,42 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
       updatePayload.file_size = data.fileSize;
     }
 
-        // Persist new array and optional metadata
-        try {
-          const { error: updateError } = await supabase
-            .from('upload_sessions')
-            .update(updatePayload)
-            .eq('session_id', data.sessionId);
+        // Persist new array and optional metadata with retries for transient DB issues
+        async function persistWithRetries(payload: any, attempts = 3) {
+          let lastErr: any = null;
+          for (let i = 0; i < attempts; i++) {
+            try {
+              const { error: updateError } = await supabase
+                .from('upload_sessions')
+                .update(payload)
+                .eq('session_id', data.sessionId);
 
-          if (updateError) {
-            console.error('Supabase update error saving upload:', updateError);
-            throw new Error('Failed to save upload: ' + (updateError.message ?? JSON.stringify(updateError)));
+              if (updateError) {
+                lastErr = updateError;
+                console.error(`Supabase update error (attempt ${i + 1}/${attempts}) saving upload:`, updateError);
+                // If it's the last attempt, throw below
+              } else {
+                return;
+              }
+            } catch (e) {
+              lastErr = e;
+              console.error(`Exception when saving upload to Supabase (attempt ${i + 1}/${attempts}):`, e);
+            }
+
+            // backoff before retrying
+            await new Promise(res => setTimeout(res, 200 * (i + 1)));
           }
-        } catch (e) {
-          console.error('Exception when saving upload to Supabase:', e);
-          throw e instanceof Error ? e : new Error('Failed to save upload');
+
+          // After retries failed, inspect error for hints and throw a detailed message
+          const msg = lastErr && lastErr.message ? lastErr.message : JSON.stringify(lastErr);
+          console.error('Failed to persist upload after retries:', msg, lastErr);
+          if (typeof msg === 'string' && msg.toLowerCase().includes('statement timeout')) {
+            throw new Error('Failed to save upload: database statement timeout. Consider switching to object storage for large file payloads. (' + msg + ')');
+          }
+          throw new Error('Failed to save upload: ' + msg);
         }
+
+        await persistWithRetries(updatePayload);
 
     return { success: true, name: data.fileName, type: data.fileType, size: data.fileSize };
   });
@@ -212,14 +233,33 @@ export const finalizeUploadSession = createServerFn({ method: 'POST' })
     if (error || !session) throw new Error('Invalid session');
     if (session.status !== 'waiting') throw new Error('Session not accepting uploads');
 
-    const { error: updateError } = await supabase
-      .from('upload_sessions')
-      .update({ status: 'uploaded', uploaded_at: new Date().toISOString() })
-      .eq('session_id', data.sessionId);
+    // Retry finalize update in case of transient DB issues
+    let lastErr: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const { error: updateError } = await supabase
+          .from('upload_sessions')
+          .update({ status: 'uploaded', uploaded_at: new Date().toISOString() })
+          .eq('session_id', data.sessionId);
+        if (!updateError) {
+          lastErr = null;
+          break;
+        }
+        lastErr = updateError;
+        console.error(`Supabase error finalizing session (attempt ${attempt + 1}/3):`, updateError);
+      } catch (e) {
+        lastErr = e;
+        console.error(`Exception finalizing session (attempt ${attempt + 1}/3):`, e);
+      }
+      await new Promise(res => setTimeout(res, 300 * (attempt + 1)));
+    }
 
-    if (updateError) {
-      console.error('Supabase error finalizing session:', updateError);
-      throw new Error('Failed to finalize session: ' + (updateError.message ?? JSON.stringify(updateError)));
+    if (lastErr) {
+      const m = lastErr && lastErr.message ? lastErr.message : JSON.stringify(lastErr);
+      if (typeof m === 'string' && m.toLowerCase().includes('statement timeout')) {
+        throw new Error('Failed to finalize session: database statement timeout. Consider switching to object storage for large file payloads. (' + m + ')');
+      }
+      throw new Error('Failed to finalize session: ' + m);
     }
 
     return { success: true };
