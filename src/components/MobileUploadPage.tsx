@@ -239,7 +239,17 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
               Only the intended receiver can decrypt and access this file.
             </p>
             <div className="mt-6">
-              <Button onClick={() => { window.location.href = '/'; }}>
+              <Button onClick={() => {
+                try {
+                  if (window.history.length > 1) {
+                    window.history.back();
+                  } else {
+                    window.location.href = '/';
+                  }
+                } catch {
+                  window.location.href = '/';
+                }
+              }}>
                 Scan another QR
               </Button>
             </div>
