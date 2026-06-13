@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { Upload, CheckCircle, AlertCircle, Loader2, Camera, File, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { uploadFileToSession, getUploadSession } from '@/utils/uploadSessions.functions';
+import pako from 'pako';
 import { encryptionManager } from '@/utils/encryption';
 
 interface MobileUploadPageProps {
@@ -43,9 +44,24 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
       // Convert file to array buffer
       const fileBuffer = await file.arrayBuffer();
 
+      // Compress if beneficial or if file is large
+      let toEncryptBuffer: ArrayBuffer = fileBuffer;
+      let compressed = false;
+      try {
+        const compressedArr = pako.gzip(new Uint8Array(fileBuffer));
+        if (compressedArr && compressedArr.length > 0 && compressedArr.length < fileBuffer.byteLength) {
+          const u8 = compressedArr instanceof Uint8Array ? compressedArr : new Uint8Array(compressedArr);
+          toEncryptBuffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+          compressed = true;
+        }
+      } catch (e) {
+        // compression failed, continue with original buffer
+        compressed = false;
+      }
+
       // Encrypt file using ECDH + AES-GCM
       const encryptedFile = await encryptionManager.encryptFileForTransfer(
-        fileBuffer,
+        toEncryptBuffer,
         session.receiver_public_key,
         sessionId
       );
@@ -79,6 +95,8 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
           iv: ivBase64,
           senderPublicKey: encryptedFile.senderPublicKey,
           finalize: finalize ?? false,
+          compressed,
+          originalSize: fileBuffer.byteLength,
         },
       });
 
@@ -327,7 +345,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
                 Supported formats: JPG, PNG, PDF
               </p>
               <p className="text-xs text-muted-foreground">
-                Maximum file size: 5MB
+                Maximum file size: 50MB
               </p>
               <p className="text-xs text-green-600 font-medium">🔒 Files are encrypted on your device</p>
             </div>

@@ -3,6 +3,7 @@ import { Smartphone, Loader2, CheckCircle, AlertCircle, RefreshCw, Download, QrC
 import { Button } from '@/components/ui/button';
 import QRCodeLib from 'qrcode';
 import JSZip from 'jszip';
+import pako from 'pako';
 import {
   createUploadSession,
   getUploadSession,
@@ -178,11 +179,23 @@ export function QRTransferPage() {
                       senderPublicKey: senderPub,
                     };
 
-                    const decryptedBuffer = await encryptionManager.decryptReceivedFile(
+                    let decryptedBuffer = await encryptionManager.decryptReceivedFile(
                       encryptedFile,
                       receiverKeyPair.privateKey,
                       sessionId
                     );
+
+                    // If the sender compressed the payload before encryption, decompress after decryption
+                    if (entry.compressed) {
+                      try {
+                        const unzipped = pako.ungzip(new Uint8Array(decryptedBuffer));
+                        const u8 = unzipped instanceof Uint8Array ? unzipped : new Uint8Array(unzipped);
+                        decryptedBuffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+                      } catch (decompErr) {
+                        console.error('Decompression failed for entry', entry.fileName ?? entry.file_name, decompErr);
+                        // continue with decryptedBuffer as-is
+                      }
+                    }
 
                     const mime = entry.fileType ?? entry.file_type ?? 'application/octet-stream';
                     const blob = encryptionManager.arrayBufferToBlob(decryptedBuffer, mime);
@@ -210,6 +223,7 @@ export function QRTransferPage() {
                 }
 
                 if (decryptedFiles.length > 0) {
+                  console.log('Decrypted files ready', decryptedFiles.map(d => d.name));
                   // Show first file in UI
                   const first = decryptedFiles[0];
                   setUploadedFile({ name: first.name, type: first.type, size: first.size, dataUrl: first.dataUrl });
@@ -225,6 +239,7 @@ export function QRTransferPage() {
                     link.click();
                     document.body.removeChild(link);
                   } else {
+                    console.log('Creating zip for', decryptedFiles.length, 'files');
                     try {
                       const zip = new JSZip();
                       for (const f of decryptedFiles) {
@@ -234,6 +249,7 @@ export function QRTransferPage() {
                         zip.file(f.name, blob);
                       }
                       const zipBlob = await zip.generateAsync({ type: 'blob' });
+                      console.log('Zip generated, size=', zipBlob.size);
                       const zipUrl = URL.createObjectURL(zipBlob);
                       const link = document.createElement('a');
                       link.href = zipUrl;
@@ -347,7 +363,7 @@ export function QRTransferPage() {
                 <span className="text-sm text-green-600 font-medium">End-to-end encrypted</span>
               </div>
               <p className="text-muted-foreground mb-4 max-w-md">
-                Use your phone's camera to scan this QR code and upload any file up to 5MB. Your file will be encrypted before upload.
+                Use your phone's camera to scan this QR code and upload any file up to 50MB. Your file will be encrypted before upload.
               </p>
               
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-4">
@@ -365,7 +381,7 @@ export function QRTransferPage() {
 
             <div className="mt-8 text-center text-sm text-muted-foreground">
               <p>Supported formats: JPG, PNG, PDF</p>
-              <p>Maximum file size: 5MB</p>
+              <p>Maximum file size: 50MB</p>
               <p className="text-green-600 font-medium">🔒 Files are encrypted on your device</p>
             </div>
           </div>

@@ -143,7 +143,7 @@ class QRUploadManager {
         return;
       }
 
-      if (file.size > 5 * 1024 * 1024) { // 5MB
+      if (file.size > 50 * 1024 * 1024) { // 50MB
         reject(new Error('File too large'));
         return;
       }

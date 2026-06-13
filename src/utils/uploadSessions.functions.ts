@@ -89,6 +89,9 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     senderPublicKey?: string;
     // If true, mark session as complete (uploaded) after this file
     finalize?: boolean;
+    // Whether the original file was compressed before encryption
+    compressed?: boolean;
+    originalSize?: number;
   }) => data)
   .handler(async ({ data }) => {
     const supabase = getSupabase();
@@ -108,7 +111,7 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     // Accept common iOS image types and allow empty/unknown fileType from some mobile browsers
     const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'image/heic', 'image/heif', 'image/jpg'];
     if (data.fileType && !allowedTypes.includes(data.fileType)) throw new Error('Invalid file type');
-    if (data.fileSize > 5 * 1024 * 1024) throw new Error('File too large');
+    if (data.fileSize > 50 * 1024 * 1024) throw new Error('File too large');
 
     // Build file entry
     const fileEntry = {
@@ -118,6 +121,8 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
       encryptedFile: data.encryptedFile,
       iv: data.iv,
       senderPublicKey: data.senderPublicKey,
+      compressed: data.compressed ?? false,
+      originalSize: data.originalSize ?? null,
       uploadedAt: new Date().toISOString(),
     };
 

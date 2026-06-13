@@ -332,7 +332,7 @@ export function UploadModal({ open, onClose, onFileSelected }: UploadModalProps)
             </Button>
 
             <p className="mt-4 text-sm text-muted-foreground">
-              Upload .jpg, .png, .jpeg or .pdf. Maximum upload size of 5MB
+              Upload .jpg, .png, .jpeg or .pdf. Maximum upload size of 50MB
             </p>
           </>
         );
