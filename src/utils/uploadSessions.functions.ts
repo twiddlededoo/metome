@@ -224,8 +224,34 @@ export const getUploadedFileData = createServerFn({ method: 'POST' })
 
     try {
       const parsed = JSON.parse(session.file_data || '[]');
-      // Ensure array of entries with expected fields
-      const files = Array.isArray(parsed) ? parsed : [parsed];
+      const rawFiles = Array.isArray(parsed) ? parsed : [parsed];
+
+      // Rehydrate encrypted payloads from object storage so existing client
+      // decryption code (which expects `encryptedFile` base64) continues working.
+      const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+      const files = await Promise.all(rawFiles.map(async (entry: any) => {
+        if (entry && entry.storagePath && !entry.encryptedFile) {
+          try {
+            const { data: blob, error: dlErr } = await supabaseAdmin.storage
+              .from('encrypted-uploads')
+              .download(entry.storagePath);
+            if (dlErr || !blob) {
+              console.error('Storage download failed for', entry.storagePath, dlErr);
+              return entry;
+            }
+            const ab = await blob.arrayBuffer();
+            const bytes = new Uint8Array(ab);
+            let bin = '';
+            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            return { ...entry, encryptedFile: btoa(bin) };
+          } catch (e) {
+            console.error('Failed to rehydrate encrypted payload:', e);
+            return entry;
+          }
+        }
+        return entry;
+      }));
+
       return { files, file_data: session.file_data };
     } catch {
       return null;
