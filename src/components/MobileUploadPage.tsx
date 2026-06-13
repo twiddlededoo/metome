@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, CheckCircle, AlertCircle, Loader2, Camera, File, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { QRScanner } from './QRScanner';
 import { uploadFileToSession, getUploadSession, finalizeUploadSession } from '@/utils/uploadSessions.functions';
 import pako from 'pako';
 import { encryptionManager } from '@/utils/encryption';
@@ -239,17 +240,7 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
               Only the intended receiver can decrypt and access this file.
             </p>
             <div className="mt-6">
-              <Button onClick={() => {
-                try {
-                  if (window.history.length > 1) {
-                    window.history.back();
-                  } else {
-                    window.location.href = '/';
-                  }
-                } catch {
-                  window.location.href = '/';
-                }
-              }}>
+              <Button onClick={() => setShowScanner(true)}>
                 Scan another QR
               </Button>
             </div>
@@ -379,6 +370,28 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
       <main className="flex-1 flex items-center justify-center">
         <div className="w-full max-w-md">
           {renderContent()}
+          {showScanner && (
+            <QRScanner
+              onDetected={(data) => {
+                try {
+                  // If the QR contains a full URL, navigate to it. Otherwise, try to construct a mobile-upload URL.
+                  const trimmed = (data || '').trim();
+                  if (/^https?:\/\//.test(trimmed)) {
+                    window.location.href = trimmed;
+                  } else if (/^\/mobile-upload\//.test(trimmed) || /^mobile-upload\//.test(trimmed)) {
+                    const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+                    window.location.href = `${window.location.origin}${path}`;
+                  } else {
+                    // fallback: open as relative path
+                    window.location.href = trimmed;
+                  }
+                } catch (err) {
+                  console.error('Failed to navigate to scanned QR url', err);
+                }
+              }}
+              onClose={() => setShowScanner(false)}
+            />
+          )}
         </div>
       </main>
       <input
