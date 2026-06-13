@@ -151,12 +151,20 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     }
 
         // Persist new array and optional metadata
-        const { error: updateError } = await supabase
-      .from('upload_sessions')
-      .update(updatePayload)
-      .eq('session_id', data.sessionId);
+        try {
+          const { error: updateError } = await supabase
+            .from('upload_sessions')
+            .update(updatePayload)
+            .eq('session_id', data.sessionId);
 
-    if (updateError) throw new Error('Failed to save upload');
+          if (updateError) {
+            console.error('Supabase update error saving upload:', updateError);
+            throw new Error('Failed to save upload: ' + (updateError.message ?? JSON.stringify(updateError)));
+          }
+        } catch (e) {
+          console.error('Exception when saving upload to Supabase:', e);
+          throw e instanceof Error ? e : new Error('Failed to save upload');
+        }
 
     return { success: true, name: data.fileName, type: data.fileType, size: data.fileSize };
   });
