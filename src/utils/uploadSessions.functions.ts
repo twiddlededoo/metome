@@ -199,3 +199,29 @@ export const deleteUploadSession = createServerFn({ method: 'POST' })
     await supabase.from('upload_sessions').delete().eq('session_id', data.sessionId);
     return { success: true };
   });
+
+export const finalizeUploadSession = createServerFn({ method: 'POST' })
+  .inputValidator((data: { sessionId: string }) => data)
+  .handler(async ({ data }) => {
+    const supabase = getSupabase();
+    const { data: session, error } = await supabase
+      .from('upload_sessions')
+      .select('session_id, expires_at, status')
+      .eq('session_id', data.sessionId)
+      .single();
+
+    if (error || !session) throw new Error('Invalid session');
+    if (session.status !== 'waiting') throw new Error('Session not accepting uploads');
+
+    const { error: updateError } = await supabase
+      .from('upload_sessions')
+      .update({ status: 'uploaded', uploaded_at: new Date().toISOString() })
+      .eq('session_id', data.sessionId);
+
+    if (updateError) {
+      console.error('Supabase error finalizing session:', updateError);
+      throw new Error('Failed to finalize session: ' + (updateError.message ?? JSON.stringify(updateError)));
+    }
+
+    return { success: true };
+  });

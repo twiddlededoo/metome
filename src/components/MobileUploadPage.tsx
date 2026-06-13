@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, CheckCircle, AlertCircle, Loader2, Camera, File, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { uploadFileToSession, getUploadSession } from '@/utils/uploadSessions.functions';
+import { uploadFileToSession, getUploadSession, finalizeUploadSession } from '@/utils/uploadSessions.functions';
 import pako from 'pako';
 import { encryptionManager } from '@/utils/encryption';
 
@@ -121,9 +121,9 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
       const fileArray = Array.from(files);
       for (let i = 0; i < fileArray.length; i++) {
         const f = fileArray[i];
-        const isLast = i === fileArray.length - 1;
+        // Always upload files without finalizing — user will explicitly finalize via "Done"
         // eslint-disable-next-line no-await-in-loop
-        await handleFileSelect(f, isLast);
+        await handleFileSelect(f, false);
       }
     })();
   };
@@ -239,10 +239,20 @@ export function MobileUploadPage({ sessionId }: MobileUploadPageProps) {
               Only the intended receiver can decrypt and access this file.
             </p>
             <div className="flex gap-3 w-full max-w-xs">
-              <Button onClick={() => setShowPickerOptions(true)} className="flex-1">
+              <Button onClick={handleGenericFileClick} className="flex-1">
                 Upload another file
               </Button>
-              <Button onClick={() => { setUploadState('idle'); setFileName(''); setProgress(0); }} variant="outline" className="flex-1">
+              <Button onClick={async () => {
+                try {
+                  // Finalize the session on server so receiver can fetch files
+                  await finalizeUploadSession({ data: { sessionId } });
+                } catch (e) {
+                  console.error('Failed to finalize session:', e);
+                }
+                setUploadState('idle');
+                setFileName('');
+                setProgress(0);
+              }} variant="outline" className="flex-1">
                 Done
               </Button>
             </div>
