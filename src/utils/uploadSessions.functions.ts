@@ -112,19 +112,6 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     // of MIME types; don't restrict here. Keep file size limit enforced.
     if (data.fileSize > 50 * 1024 * 1024) throw new Error('File too large');
 
-    // Build file entry
-    const fileEntry = {
-      fileName: data.fileName,
-      fileType: data.fileType,
-      fileSize: data.fileSize,
-      encryptedFile: data.encryptedFile,
-      iv: data.iv,
-      senderPublicKey: data.senderPublicKey,
-      compressed: data.compressed ?? false,
-      originalSize: data.originalSize ?? null,
-      uploadedAt: new Date().toISOString(),
-    };
-
     // Parse existing file_data which may be a JSON array
     let existing: any[] = [];
     try {
@@ -134,6 +121,39 @@ export const uploadFileToSession = createServerFn({ method: 'POST' })
     } catch {
       existing = [];
     }
+
+    // Upload the (large) encrypted payload to object storage instead of stuffing
+    // base64 into the DB column, which causes statement timeouts on large files.
+    let storagePath: string | null = null;
+    if (data.encryptedFile) {
+      const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+      const idx = existing.length;
+      storagePath = `${data.sessionId}/${idx}-${Date.now()}.bin`;
+      // Decode base64 to bytes for upload
+      const binStr = atob(data.encryptedFile);
+      const bytes = new Uint8Array(binStr.length);
+      for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+      const { error: upErr } = await supabaseAdmin.storage
+        .from('encrypted-uploads')
+        .upload(storagePath, bytes, { contentType: 'application/octet-stream', upsert: true });
+      if (upErr) {
+        console.error('Storage upload failed:', upErr);
+        throw new Error('Failed to upload encrypted payload: ' + upErr.message);
+      }
+    }
+
+    // Build file entry (no large base64 stored in DB)
+    const fileEntry = {
+      fileName: data.fileName,
+      fileType: data.fileType,
+      fileSize: data.fileSize,
+      storagePath,
+      iv: data.iv,
+      senderPublicKey: data.senderPublicKey,
+      compressed: data.compressed ?? false,
+      originalSize: data.originalSize ?? null,
+      uploadedAt: new Date().toISOString(),
+    };
 
     existing.push(fileEntry);
 
