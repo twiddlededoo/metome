@@ -174,11 +174,10 @@ export const getUploadedFileData = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const supabase = getSupabase();
         const { data: session, error } = await supabase
-      .from('upload_sessions')
-      .select('file_data, file_name, file_type, file_size, uploaded_at')
-      .eq('session_id', data.sessionId)
-      .eq('status', 'uploaded')
-      .single();
+          .from('upload_sessions')
+          .select('file_data, file_name, file_type, file_size, uploaded_at, status')
+          .eq('session_id', data.sessionId)
+          .single();
 
     if (error || !session) return null;
 
