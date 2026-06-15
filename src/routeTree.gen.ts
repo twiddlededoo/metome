@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MobileUploadSessionIdRouteImport } from './routes/mobile-upload.$sessionId'
+import { Route as ApiPublicHooksCleanupUploadsRouteImport } from './routes/api/public/hooks/cleanup-uploads'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +23,48 @@ const MobileUploadSessionIdRoute = MobileUploadSessionIdRouteImport.update({
   path: '/mobile-upload/$sessionId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksCleanupUploadsRoute =
+  ApiPublicHooksCleanupUploadsRouteImport.update({
+    id: '/api/public/hooks/cleanup-uploads',
+    path: '/api/public/hooks/cleanup-uploads',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/mobile-upload/$sessionId': typeof MobileUploadSessionIdRoute
+  '/api/public/hooks/cleanup-uploads': typeof ApiPublicHooksCleanupUploadsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/mobile-upload/$sessionId': typeof MobileUploadSessionIdRoute
+  '/api/public/hooks/cleanup-uploads': typeof ApiPublicHooksCleanupUploadsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/mobile-upload/$sessionId': typeof MobileUploadSessionIdRoute
+  '/api/public/hooks/cleanup-uploads': typeof ApiPublicHooksCleanupUploadsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/mobile-upload/$sessionId'
+  fullPaths:
+    | '/'
+    | '/mobile-upload/$sessionId'
+    | '/api/public/hooks/cleanup-uploads'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/mobile-upload/$sessionId'
-  id: '__root__' | '/' | '/mobile-upload/$sessionId'
+  to: '/' | '/mobile-upload/$sessionId' | '/api/public/hooks/cleanup-uploads'
+  id:
+    | '__root__'
+    | '/'
+    | '/mobile-upload/$sessionId'
+    | '/api/public/hooks/cleanup-uploads'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   MobileUploadSessionIdRoute: typeof MobileUploadSessionIdRoute
+  ApiPublicHooksCleanupUploadsRoute: typeof ApiPublicHooksCleanupUploadsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +83,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MobileUploadSessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/cleanup-uploads': {
+      id: '/api/public/hooks/cleanup-uploads'
+      path: '/api/public/hooks/cleanup-uploads'
+      fullPath: '/api/public/hooks/cleanup-uploads'
+      preLoaderRoute: typeof ApiPublicHooksCleanupUploadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   MobileUploadSessionIdRoute: MobileUploadSessionIdRoute,
+  ApiPublicHooksCleanupUploadsRoute: ApiPublicHooksCleanupUploadsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
